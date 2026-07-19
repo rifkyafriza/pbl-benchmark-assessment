@@ -50,12 +50,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const sems = await listSemesters();
+      const [sems, lecs, opts] = await Promise.all([
+        listSemesters(),
+        listLecturerAccounts(),
+        listAllLecturers()
+      ]);
       setSemesters(sems);
       const active = sems.find((s) => s.is_active) || sems[0];
       if (active) setActiveSemesterId(active.id);
-      setLecturers(await listLecturerAccounts());
-      setLecturerOptions(await listAllLecturers());
+      setLecturers(lecs);
+      setLecturerOptions(opts);
       setLoading(false);
     })();
   }, []);
@@ -66,8 +70,12 @@ export default function AdminDashboard() {
     if (!activeSemesterId) { setProgress([]); setTotalTeams(0); return; }
     (async () => {
       setLoading(true);
-      setProgress(await getProgress(activeSemesterId));
-      setTotalTeams(await getTeamCount(activeSemesterId));
+      const [prog, count] = await Promise.all([
+        getProgress(activeSemesterId),
+        getTeamCount(activeSemesterId)
+      ]);
+      setProgress(prog);
+      setTotalTeams(count);
       setLoading(false);
     })();
   }, [activeSemesterId]);

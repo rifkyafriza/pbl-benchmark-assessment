@@ -131,50 +131,40 @@ export async function getProgress(academicYearId: string) {
     { data: teams }
   ] = await Promise.all([
     supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single(),
-    supabaseAdmin.from('teams').select('id, name, team_code').eq('academic_year_id', academicYearId).eq('is_deleted', false)
+    supabaseAdmin.from('teams').select(`
+      id, name, team_code,
+      team_lecturers (team_id, lecturer_id, role, users(name)),
+      team_students (team_id, students(kelas)),
+      grades (team_id, lecturer_id, is_locked, period)
+    `).eq('academic_year_id', academicYearId).eq('is_deleted', false)
   ]);
   const period = semester?.active_period || 'ATS';
 
   if (!teams || teams.length === 0) return [];
-  const teamIds = teams.map((t) => t.id);
 
-  const [
-    { data: assignments },
-    { data: teamStudentCounts },
-    { data: grades }
-  ] = await Promise.all([
-    supabaseAdmin.from('team_lecturers').select('team_id, lecturer_id, role, users(name)').in('team_id', teamIds),
-    supabaseAdmin.from('team_students').select('team_id, students(kelas)').in('team_id', teamIds),
-    supabaseAdmin.from('grades').select('team_id, lecturer_id, is_locked').in('team_id', teamIds).eq('period', period)
-  ]);
+  return teams.map((t: any) => {
+    let pimproId: string | null = null;
+    let pimproName: string | null = null;
+    const reviewersForTeam: any[] = [];
+    (t.team_lecturers || []).forEach((l: any) => {
+       if (l.role === 'pimpro') {
+           pimproId = l.lecturer_id;
+           pimproName = l.users?.name || 'Unknown';
+       }
+       if (l.role === 'reviewer') reviewersForTeam.push({ lecturer_id: l.lecturer_id, lecturer_name: l.users?.name || 'Unknown' });
+    });
 
-  const totalByTeam = new Map<string, number>();
-  const kelasByTeam = new Map<string, string>();
-  (teamStudentCounts || []).forEach((r: any) => {
-    totalByTeam.set(r.team_id, (totalByTeam.get(r.team_id) || 0) + 1);
-    if (r.students?.kelas && !kelasByTeam.has(r.team_id)) {
-      kelasByTeam.set(r.team_id, r.students.kelas);
+    const totalStudents = (t.team_students || []).length;
+    let team_kelas = null;
+    if (t.team_students && t.team_students.length > 0) {
+      team_kelas = t.team_students[0].students?.kelas || null;
     }
-  });
 
-  const pimproByTeam = new Map<string, { id: string; name: string }>();
-  const reviewerRows: { team_id: string; lecturer_id: string; lecturer_name: string }[] = [];
-  (assignments || []).forEach((a: any) => {
-    if (a.role === 'pimpro') pimproByTeam.set(a.team_id, { id: a.lecturer_id, name: a.users?.name || 'Unknown' });
-    if (a.role === 'reviewer') reviewerRows.push({ team_id: a.team_id, lecturer_id: a.lecturer_id, lecturer_name: a.users?.name || 'Unknown' });
-  });
-
-  // One progress row per team, carrying up to 3 reviewer slots (array, index 0-2)
-  // instead of one row per reviewer — lets the admin UI render 3 fixed dropdowns
-  // and per-reviewer completion status regardless of how many (0-3) are assigned.
-  return teams.map((t) => {
-    const reviewersForTeam = reviewerRows.filter((r) => r.team_id === t.id);
-    const totalStudents = totalByTeam.get(t.id) || 0;
-    const pimpro = pimproByTeam.get(t.id) || null;
-
-    const reviewers = reviewersForTeam.map((r) => {
-      const teamGrades = (grades || []).filter((g) => g.team_id === t.id && g.lecturer_id === r.lecturer_id);
-      const finalized = teamGrades.filter((g) => g.is_locked).length;
+    const activeGrades = (t.grades || []).filter((g: any) => g.period === period);
+    
+    const reviewers = reviewersForTeam.map((r: any) => {
+      const teamGrades = activeGrades.filter((g: any) => g.lecturer_id === r.lecturer_id);
+      const finalized = teamGrades.filter((g: any) => g.is_locked).length;
       const status = teamGrades.length === 0 ? 'Not Started' : finalized === totalStudents && totalStudents > 0 ? 'Completed' : 'In Progress';
       return {
         lecturer_id: r.lecturer_id, lecturer_name: r.lecturer_name,
@@ -184,8 +174,8 @@ export async function getProgress(academicYearId: string) {
 
     return {
       team_id: t.id, team_name: t.name, team_code: t.team_code, academic_year_id: academicYearId,
-      pimpro_id: pimpro?.id ?? null, pimpro_name: pimpro?.name ?? null,
-      team_kelas: kelasByTeam.get(t.id) ?? null,
+      pimpro_id: pimproId, pimpro_name: pimproName,
+      team_kelas: team_kelas,
       total_students: totalStudents, reviewers,
     };
   });
