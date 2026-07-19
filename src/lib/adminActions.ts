@@ -309,71 +309,117 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
 
   if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
 
-  // 1. Upsert pimpro lecturer accounts (username left null — admin sets credentials separately).
+  // 1. Upsert pimpro lecturer accounts
   const pimproNames = Array.from(new Set(rows.map((r) => String(r['PIMPRO']).trim())));
   const lecturerMap = new Map<string, string>();
-  for (const name of pimproNames) {
-    let { data: user } = await supabaseAdmin.from('users').select('id').eq('name', name).eq('role', 'lecturer').maybeSingle();
-    if (!user) {
-      const { data, error } = await supabaseAdmin.from('users').insert({ name, role: 'lecturer' }).select('id').single();
-      if (error) return { success: false, error: `Import aborted while creating lecturer "${name}": ${error.message}` };
-      user = data;
-    }
-    lecturerMap.set(name, user!.id);
+  
+  const { data: existingLecturers, error: existingLecturersErr } = await supabaseAdmin
+    .from('users')
+    .select('id, name')
+    .eq('role', 'lecturer')
+    .in('name', pimproNames);
+  if (existingLecturersErr) return { success: false, error: 'Failed to fetch lecturers' };
+
+  const existingLecturersList = existingLecturers || [];
+  const existingLecturerNames = new Set(existingLecturersList.map(l => l.name));
+  
+  const newLecturers = pimproNames.filter(n => !existingLecturerNames.has(n)).map(name => ({ name, role: 'lecturer' }));
+  
+  if (newLecturers.length > 0) {
+    const { data: insertedLecturers, error: insertLecturersErr } = await supabaseAdmin
+      .from('users')
+      .insert(newLecturers)
+      .select('id, name');
+    if (insertLecturersErr) return { success: false, error: `Failed to create new lecturers: ${insertLecturersErr.message}` };
+    existingLecturersList.push(...(insertedLecturers || []));
   }
+  
+  existingLecturersList.forEach(l => lecturerMap.set(l.name, l.id));
 
   // 2. Upsert teams (unique per academic_year_id + team_code + name)
   const teamRows = Array.from(new Map(rows.map((r) => [`${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`, r])).values());
   const teamMap = new Map<string, string>();
+  
+  const teamCodes = teamRows.map(r => String(r['KODE']).trim());
+  const { data: existingTeams, error: existingTeamsErr } = await supabaseAdmin
+    .from('teams')
+    .select('id, team_code, name, is_deleted')
+    .eq('academic_year_id', academicYearId)
+    .in('team_code', teamCodes);
+  if (existingTeamsErr) return { success: false, error: 'Failed to fetch existing teams' };
+  
+  const existingTeamsList = existingTeams || [];
+  const newTeamsToInsert = [];
+  const teamsToRestore = [];
+  
   for (const r of teamRows) {
     const code = String(r['KODE']).trim();
     const projectName = String(r['JUDUL PROJECT']).trim();
-    const uniqueKey = `${code}_${projectName}`;
-    let { data: t } = await supabaseAdmin
-      .from('teams')
-      .select('id, is_deleted')
-      .eq('academic_year_id', academicYearId)
-      .eq('team_code', code)
-      .eq('name', projectName)
-      .maybeSingle();
-    if (!t) {
-      const { data, error } = await supabaseAdmin
-        .from('teams')
-        .insert({ academic_year_id: academicYearId, team_code: code, name: projectName })
-        .select('id, is_deleted')
-        .single();
-      if (error) return { success: false, error: `Import aborted while creating team "${code}": ${error.message}` };
-      t = data;
-    } else if (t.is_deleted) {
-      const { error } = await supabaseAdmin
-        .from('teams')
-        .update({ is_deleted: false })
-        .eq('id', t.id);
-      if (error) return { success: false, error: `Import aborted while restoring team "${code}": ${error.message}` };
-    }
-    teamMap.set(uniqueKey, t!.id);
-
-    // Ensure pimpro assignment (role='pimpro' only — must never also create a
-    // role='reviewer' row; reviewer assignment comes solely from the separate
-    // reviewer-import template or manual admin edits on the progress table).
-    const lecturerId = lecturerMap.get(String(r['PIMPRO']).trim());
-    const { data: existingPimpro } = await supabaseAdmin
-      .from('team_lecturers')
-      .select('id, lecturer_id')
-      .eq('team_id', t!.id)
-      .eq('role', 'pimpro')
-      .maybeSingle();
-
-    if (existingPimpro) {
-      if (existingPimpro.lecturer_id !== lecturerId) {
-        await supabaseAdmin.from('team_lecturers').update({ lecturer_id: lecturerId }).eq('id', existingPimpro.id);
-      }
+    const existing = existingTeamsList.find(t => t.team_code === code && t.name === projectName);
+    
+    if (existing) {
+      teamMap.set(`${code}_${projectName}`, existing.id);
+      if (existing.is_deleted) teamsToRestore.push(existing.id);
     } else {
-      await supabaseAdmin.from('team_lecturers').insert({ team_id: t!.id, lecturer_id: lecturerId, role: 'pimpro' });
+      newTeamsToInsert.push({ academic_year_id: academicYearId, team_code: code, name: projectName });
+    }
+  }
+  
+  if (teamsToRestore.length > 0) {
+     const { error: restoreErr } = await supabaseAdmin.from('teams').update({ is_deleted: false }).in('id', teamsToRestore);
+     if (restoreErr) return { success: false, error: 'Failed to restore teams' };
+  }
+  
+  if (newTeamsToInsert.length > 0) {
+     const { data: insertedTeams, error: insertTeamsErr } = await supabaseAdmin.from('teams').insert(newTeamsToInsert).select('id, team_code, name');
+     if (insertTeamsErr) return { success: false, error: `Failed to create new teams: ${insertTeamsErr.message}` };
+     insertedTeams?.forEach(t => teamMap.set(`${t.team_code}_${t.name}`, t.id));
+  }
+
+  // 2.5 Assign pimpros
+  const teamLecturerLinks = [];
+  for (const r of teamRows) {
+    const code = String(r['KODE']).trim();
+    const projectName = String(r['JUDUL PROJECT']).trim();
+    const teamId = teamMap.get(`${code}_${projectName}`);
+    const lecturerId = lecturerMap.get(String(r['PIMPRO']).trim());
+    if (teamId && lecturerId) {
+       teamLecturerLinks.push({ team_id: teamId, lecturer_id: lecturerId, role: 'pimpro' });
+    }
+  }
+  
+  const teamIds = Array.from(teamMap.values());
+  if (teamIds.length > 0) {
+    const { data: existingPimproLinks } = await supabaseAdmin.from('team_lecturers').select('id, team_id, lecturer_id').eq('role', 'pimpro').in('team_id', teamIds);
+    const existingPimproMap = new Map((existingPimproLinks || []).map(l => [l.team_id, l]));
+    
+    const newPimproLinks = [];
+    for (const link of teamLecturerLinks) {
+       const existing = existingPimproMap.get(link.team_id);
+       if (existing) {
+          if (existing.lecturer_id !== link.lecturer_id) {
+             await supabaseAdmin.from('team_lecturers').update({ lecturer_id: link.lecturer_id }).eq('id', existing.id);
+          }
+       } else {
+          newPimproLinks.push(link);
+       }
+    }
+    if (newPimproLinks.length > 0) {
+       const { error: insertPimproErr } = await supabaseAdmin.from('team_lecturers').insert(newPimproLinks);
+       if (insertPimproErr) return { success: false, error: 'Failed to assign pimpros' };
     }
   }
 
-  // 3. Upsert students + link to team.
+  // 3. Upsert students + link to team
+  const allNims = Array.from(new Set(rows.map(r => String(r['NIM']).trim())));
+  // If nims > 1000, we should chunk it, but 510 is fine.
+  const { data: existingStudents, error: existingStudentsErr } = await supabaseAdmin.from('students').select('id, nim').in('nim', allNims);
+  if (existingStudentsErr) return { success: false, error: 'Failed to fetch students' };
+  
+  const existingStudentMap = new Map((existingStudents || []).map(s => [s.nim, s.id]));
+  const studentsToInsert = [];
+  const studentsToUpdate = [];
+  
   for (const r of rows) {
     const nim = String(r['NIM']).trim();
     const studentData = {
@@ -383,20 +429,44 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
       semester: r['SEMESTER'] ? String(r['SEMESTER']).trim() : null,
       kelas: r['KELAS'] ? String(r['KELAS']).trim() : null,
     };
-    
-    let { data: s } = await supabaseAdmin.from('students').select('id').eq('nim', nim).maybeSingle();
-    if (!s) {
-      const { data, error } = await supabaseAdmin.from('students').insert(studentData).select('id').single();
-      if (error) return { success: false, error: `Import aborted while creating student "${nim}": ${error.message}` };
-      s = data;
+    const existingId = existingStudentMap.get(nim);
+    if (existingId) {
+      studentsToUpdate.push({ id: existingId, ...studentData });
     } else {
-      // Always update student data so it reflects the latest imported excel (e.g. they moved to a new SEMESTER)
-      await supabaseAdmin.from('students').update(studentData).eq('id', s.id);
+      studentsToInsert.push(studentData);
     }
+  }
+
+  if (studentsToInsert.length > 0) {
+    const { data: insertedStudents, error: insertStudentsErr } = await supabaseAdmin.from('students').insert(studentsToInsert).select('id, nim');
+    if (insertStudentsErr) return { success: false, error: `Failed to insert students: ${insertStudentsErr.message}` };
+    insertedStudents?.forEach(s => existingStudentMap.set(s.nim, s.id));
+  }
+  
+  if (studentsToUpdate.length > 0) {
+     const { error: updateStudentsErr } = await supabaseAdmin.from('students').upsert(studentsToUpdate);
+     if (updateStudentsErr) return { success: false, error: `Failed to update students: ${updateStudentsErr.message}` };
+  }
+  
+  // Create student-team links
+  const studentTeamLinks = [];
+  for (const r of rows) {
+    const nim = String(r['NIM']).trim();
     const teamId = teamMap.get(`${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`);
-    const { data: link } = await supabaseAdmin.from('team_students').select('team_id').eq('team_id', teamId).eq('student_id', s!.id).maybeSingle();
-    if (!link) {
-      await supabaseAdmin.from('team_students').insert({ team_id: teamId, student_id: s!.id });
+    const studentId = existingStudentMap.get(nim);
+    if (teamId && studentId) {
+       studentTeamLinks.push({ team_id: teamId, student_id: studentId });
+    }
+  }
+  
+  if (teamIds.length > 0) {
+    const { data: existingStudentLinks } = await supabaseAdmin.from('team_students').select('team_id, student_id').in('team_id', teamIds);
+    const existingStudentLinkSet = new Set((existingStudentLinks || []).map(l => `${l.team_id}_${l.student_id}`));
+    
+    const newStudentLinks = studentTeamLinks.filter(l => !existingStudentLinkSet.has(`${l.team_id}_${l.student_id}`));
+    if (newStudentLinks.length > 0) {
+       const { error: insertStudentLinkErr } = await supabaseAdmin.from('team_students').insert(newStudentLinks);
+       if (insertStudentLinkErr) return { success: false, error: 'Failed to insert team-student links' };
     }
   }
 
