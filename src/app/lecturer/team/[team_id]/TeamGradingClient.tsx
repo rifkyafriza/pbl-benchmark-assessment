@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, Save, CheckCircle2, Loader2 } from 'lucide-react';
 import { saveGrades } from '@/lib/lecturerActions';
 
@@ -88,9 +89,9 @@ export default function TeamGradingClient({
       <header className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/lecturer/dashboard')} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+            <Link prefetch={true} href="/lecturer/dashboard" className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
               <ArrowLeft size={20} />
-            </button>
+            </Link>
             <div>
               <h1 className="font-bold text-navy dark:text-white text-lg">{team?.name}</h1>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{team?.team_code}{period ? ` · ${period}` : ''}</p>

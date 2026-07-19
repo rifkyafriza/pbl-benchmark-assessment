@@ -16,35 +16,31 @@ export async function getMyReviewTeams() {
     .maybeSingle();
   if (!activeAcademicYear) return { lecturerName: session.name, teams: [] as any[] };
 
-  const { data: assignments } = await supabaseAdmin
-    .from('team_lecturers')
-    .select('team_id')
-    .eq('lecturer_id', session.id)
-    .eq('role', 'reviewer'); // pimpro-only assignments must NOT surface here
-
-  const teamIds = (assignments || []).map((a) => a.team_id);
-  if (teamIds.length === 0) return { lecturerName: session.name, teams: [] as any[] };
-
-  const { data: teamStudentCounts } = await supabaseAdmin.from('team_students').select('team_id, students(kelas)').in('team_id', teamIds);
-  const kelasByTeam = new Map<string, string>();
-  (teamStudentCounts || []).forEach((r: any) => {
-    if (r.students?.kelas && !kelasByTeam.has(r.team_id)) {
-      kelasByTeam.set(r.team_id, r.students.kelas);
-    }
-  });
-
   const { data: teams } = await supabaseAdmin
     .from('teams')
-    .select('id, name, team_code')
-    .in('id', teamIds)
+    .select(`
+      id, name, team_code,
+      team_lecturers!inner(lecturer_id, role),
+      team_students (students(kelas))
+    `)
     .eq('academic_year_id', activeAcademicYear.id)
     .eq('is_deleted', false)
+    .eq('team_lecturers.lecturer_id', session.id)
+    .eq('team_lecturers.role', 'reviewer')
     .order('team_code');
 
-  const teamsWithKelas = (teams || []).map(t => ({
-    ...t,
-    team_kelas: kelasByTeam.get(t.id) || null
-  }));
+  const teamsWithKelas = (teams || []).map((t: any) => {
+    let team_kelas = null;
+    if (t.team_students && t.team_students.length > 0) {
+      team_kelas = t.team_students[0].students?.kelas || null;
+    }
+    return {
+      id: t.id,
+      name: t.name,
+      team_code: t.team_code,
+      team_kelas
+    };
+  });
 
   return { lecturerName: session.name, teams: teamsWithKelas };
 }
@@ -59,38 +55,28 @@ async function getActivePeriod(): Promise<'ATS' | 'AAS'> {
 export async function getTeamForGrading(teamId: string) {
   const session = await requireRole('lecturer');
 
-  // Confirm this lecturer is assigned as reviewer for this team (defense in depth).
-  const { data: assignment } = await supabaseAdmin
-    .from('team_lecturers')
-    .select('team_id')
-    .eq('team_id', teamId)
-    .eq('lecturer_id', session.id)
-    .eq('role', 'reviewer')
-    .maybeSingle();
+  // Fetch all necessary data concurrently
+  const [
+    { data: assignment },
+    { data: activeYearData },
+    { data: team },
+    { data: ts },
+    { data: grades }
+  ] = await Promise.all([
+    supabaseAdmin.from('team_lecturers').select('team_id').eq('team_id', teamId).eq('lecturer_id', session.id).eq('role', 'reviewer').maybeSingle(),
+    supabaseAdmin.from('academic_years').select('active_period').eq('is_active', true).maybeSingle(),
+    supabaseAdmin.from('teams').select('*').eq('id', teamId).single(),
+    supabaseAdmin.from('team_students').select('student_id, students(id, name, nim, kelas)').eq('team_id', teamId),
+    supabaseAdmin.from('grades').select('*').eq('team_id', teamId).eq('lecturer_id', session.id)
+  ]);
+
   if (!assignment) return null;
 
-  const period = await getActivePeriod();
-
-  const { data: team } = await supabaseAdmin.from('teams').select('*').eq('id', teamId).single();
-
-  const { data: ts } = await supabaseAdmin
-    .from('team_students')
-    .select('student_id, students(id, name, nim, kelas)')
-    .eq('team_id', teamId);
-
+  const period = (activeYearData?.active_period as 'ATS' | 'AAS') || 'ATS';
   const students = (ts || []).map((r: any) => r.students).filter(Boolean);
+  const activeGrades = (grades || []).filter((g: any) => g.period === period);
 
-  // Scoped to the active period only — switching ATS/AAS shows a fresh scoring
-  // form, since each period's grades are independent rows (unique on
-  // student_id, team_id, lecturer_id, period).
-  const { data: grades } = await supabaseAdmin
-    .from('grades')
-    .select('*')
-    .eq('team_id', teamId)
-    .eq('lecturer_id', session.id)
-    .eq('period', period);
-
-  return { team, students, grades: grades || [], lecturerId: session.id, period };
+  return { team, students, grades: activeGrades, lecturerId: session.id, period };
 }
 
 const clampScore = (n: any) => Math.max(0, Math.min(5, Math.round(Number(n) || 0)));

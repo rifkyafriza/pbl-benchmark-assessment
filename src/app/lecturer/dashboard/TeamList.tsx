@@ -35,7 +35,7 @@ export default function TeamList({ teams }: { teams: any[] }) {
           </div>
         ) : (
           filteredTeams.map((team: any) => (
-            <Link key={team.id} href={`/lecturer/team/${team.id}`} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-sky hover:shadow-md transition-all cursor-pointer group block">
+            <Link prefetch={true} key={team.id} href={`/lecturer/team/${team.id}`} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-sky hover:shadow-md transition-all cursor-pointer group block">
               <div className="flex justify-between items-start mb-4">
                 <div className="p-3 bg-sky/10 text-sky rounded-lg">
                   <BookOpen size={24} />
