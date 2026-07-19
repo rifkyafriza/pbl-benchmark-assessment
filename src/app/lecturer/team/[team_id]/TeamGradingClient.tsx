@@ -40,11 +40,13 @@ export default function TeamGradingClient({
   students,
   initialGrades,
   isLocked,
+  period,
 }: {
   team: any;
   students: Student[];
   initialGrades: Record<string, GradeEntry>;
   isLocked: boolean;
+  period?: 'ATS' | 'AAS';
 }) {
   const router = useRouter();
   const [grades, setGrades] = useState<Record<string, GradeEntry>>(initialGrades);
@@ -83,7 +85,7 @@ export default function TeamGradingClient({
             </button>
             <div>
               <h1 className="font-bold text-navy text-lg">{team?.name}</h1>
-              <p className="text-xs text-gray-500 font-medium">{team?.team_code}</p>
+              <p className="text-xs text-gray-500 font-medium">{team?.team_code}{period ? ` · ${period}` : ''}</p>
             </div>
           </div>
           {locked && <span className="bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full font-medium">Locked</span>}

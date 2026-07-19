@@ -3,17 +3,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { logout } from '@/lib/auth';
 import {
-  listSemesters, addSemester, deleteSemester, setActiveSemester,
+  listSemesters, addSemester, deleteSemester, setActiveSemester, setActivePeriod,
   listLecturerAccounts, createLecturerAccount,
   updateLecturerAccount, getLecturerGradeCount, deleteLecturerAccount,
   getProgress, getTeamCount, unlockTeamReviewer, listAllLecturers, setTeamAssignment, setTeamReviewer,
   importTeamsTemplate, importReviewersTemplate, exportGradesData,
+  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam,
 } from '@/lib/adminActions';
 import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
 
-type Semester = { id: string; name: string; is_active: boolean };
+type Semester = { id: string; name: string; is_active: boolean; active_period: 'ATS' | 'AAS' };
 type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string };
 type TeamProgress = {
   team_id: string; team_name: string; team_code: string; semester_id: string;
@@ -35,6 +36,7 @@ export default function AdminDashboard() {
   const [newLecturerUsername, setNewLecturerUsername] = useState('');
   const [newLecturerPassword, setNewLecturerPassword] = useState('');
   const [editingLecturer, setEditingLecturer] = useState<LecturerAccount | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamProgress | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [isImportingTeams, setIsImportingTeams] = useState(false);
@@ -110,6 +112,14 @@ export default function AdminDashboard() {
     setActiveSemesterId(id);
   };
 
+  const handleSetActivePeriod = async (semesterId: string, period: 'ATS' | 'AAS') => {
+    try {
+      await setActivePeriod(semesterId, period);
+      setSemesters(semesters.map((s) => (s.id === semesterId ? { ...s, active_period: period } : s)));
+      setProgress(await getProgress(semesterId));
+    } catch (e: any) { alert('Error setting active period: ' + e.message); }
+  };
+
   const handleCreateLecturer = async () => {
     try {
       await createLecturerAccount(newLecturerName, newLecturerUsername, newLecturerPassword);
@@ -133,9 +143,18 @@ export default function AdminDashboard() {
   const handleUnlock = async (teamId: string, lecturerId: string) => {
     if (!confirm('Unlock this reviewer\'s scores for this team?')) return;
     try {
-      await unlockTeamReviewer(teamId, lecturerId);
+      await unlockTeamReviewer(teamId, lecturerId, activeSemesterId);
       setProgress(await getProgress(activeSemesterId));
     } catch (e: any) { alert('Error: ' + e.message); }
+  };
+
+  const handleDeleteTeam = async (team: TeamProgress) => {
+    if (!confirm(`Delete team "${team.team_name}" (${team.team_code})?\n\nIf the team has no grades, it will be permanently deleted. If it already has grades, it will be soft-deleted (hidden but preserved). Continue?`)) return;
+    try {
+      await deleteTeam(team.team_id);
+      setTotalTeams(await getTeamCount(activeSemesterId));
+      setProgress(await getProgress(activeSemesterId));
+    } catch (e: any) { alert('Error deleting team: ' + e.message); }
   };
 
   const downloadTeamsTemplate = () => {
@@ -255,6 +274,21 @@ export default function AdminDashboard() {
                     </button>
                     <span className={`font-medium ${sem.is_active ? 'text-sky' : 'text-gray-700 dark:text-gray-300'}`}>{sem.name}</span>
                     {sem.is_active && <span className="text-xs bg-sky/20 text-sky px-2 py-0.5 rounded-full">Active</span>}
+                    {sem.is_active && (
+                      <div className="flex items-center gap-1 ml-2 border border-gray-200 dark:border-gray-600 rounded-full p-0.5">
+                        {(['ATS', 'AAS'] as const).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => handleSetActivePeriod(sem.id, p)}
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
+                              sem.active_period === p ? 'bg-orange text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button onClick={() => handleDeleteSemester(sem.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                 </div>
@@ -312,6 +346,19 @@ export default function AdminDashboard() {
         />
       )}
 
+      {editingTeam && (
+        <TeamEditModal
+          team={editingTeam}
+          onClose={() => setEditingTeam(null)}
+          onSaved={async () => {
+            if (activeSemesterId) {
+              setProgress(await getProgress(activeSemesterId));
+              setTotalTeams(await getTeamCount(activeSemesterId));
+            }
+          }}
+        />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Templates & Import */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -366,7 +413,11 @@ export default function AdminDashboard() {
       <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
           <h2 className="text-xl font-semibold">Reviewer Grading Progress</h2>
-          {activeSemesterId && <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">Showing: {semesters.find((s) => s.id === activeSemesterId)?.name}</span>}
+          {activeSemesterId && (
+            <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
+              Showing: {semesters.find((s) => s.id === activeSemesterId)?.name} — {semesters.find((s) => s.id === activeSemesterId)?.active_period}
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -452,12 +503,18 @@ export default function AdminDashboard() {
                           </div>
                         )}
                       </td>
-                      <td className="p-4 space-y-1">
-                        {p.reviewers.map((r) => (
-                          <button key={r.lecturer_id} onClick={() => handleUnlock(p.team_id, r.lecturer_id)} className="text-xs text-orange-600 hover:underline flex items-center gap-1">
-                            <Unlock size={14} /> Unlock {r.lecturer_name}
-                          </button>
-                        ))}
+                      <td className="p-4 space-y-2">
+                        <div className="space-y-1">
+                          {p.reviewers.map((r) => (
+                            <button key={r.lecturer_id} onClick={() => handleUnlock(p.team_id, r.lecturer_id)} className="text-xs text-orange-600 hover:underline flex items-center gap-1">
+                              <Unlock size={14} /> Unlock {r.lecturer_name}
+                            </button>
+                          ))}
+                        </div>
+                        <div className={`flex gap-3 ${p.reviewers.length > 0 ? 'pt-2 border-t border-gray-100 dark:border-gray-700' : ''}`}>
+                          <button onClick={() => setEditingTeam(p)} className="text-xs text-sky hover:underline flex items-center gap-1"><Pencil size={14} /> Edit</button>
+                          <button onClick={() => handleDeleteTeam(p)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><Trash2 size={14} /> Delete</button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -505,6 +562,121 @@ function LecturerEditModal({
         <div className="flex gap-2 pt-2">
           <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg py-2 text-sm">Cancel</button>
           <button onClick={submit} disabled={pending} className="flex-1 bg-navy hover:bg-navy-light text-white rounded-lg py-2 text-sm disabled:opacity-50">{pending ? 'Saving...' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamEditModal({
+  team, onClose, onSaved,
+}: { team: TeamProgress; onClose: () => void; onSaved: () => void }) {
+  const [students, setStudents] = useState<{ id: string; nim: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  const [newNim, setNewNim] = useState('');
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    getTeamStudents(team.team_id)
+      .then(setStudents)
+      .catch((e) => setError('Failed to load students: ' + e.message))
+      .finally(() => setLoading(false));
+  }, [team.team_id]);
+
+  const handleUpdateStudent = async (studentId: string, nim: string, name: string) => {
+    try {
+      await updateStudent(studentId, nim, name);
+      setStudents(students.map(s => s.id === studentId ? { ...s, nim, name } : s));
+      onSaved();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const handleAddStudent = async () => {
+    if (!newNim.trim() || !newName.trim()) return alert('NIM and Name required');
+    setAdding(true);
+    try {
+      await addStudentToTeam(team.team_id, newNim, newName);
+      setStudents(await getTeamStudents(team.team_id));
+      setNewNim('');
+      setNewName('');
+      onSaved();
+    } catch (e: any) { alert(e.message); }
+    finally { setAdding(false); }
+  };
+
+  const handleRemoveStudent = async (studentId: string) => {
+    if (!confirm('Remove this student from the team?')) return;
+    try {
+      await removeStudentFromTeam(team.team_id, studentId);
+      setStudents(students.filter(s => s.id !== studentId));
+      onSaved();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-2xl w-full flex flex-col max-h-[90vh]">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h3 className="text-lg font-semibold">Edit Team: {team.team_name}</h3>
+            <p className="text-sm text-gray-500">{team.team_code}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 font-bold p-2">&times;</button>
+        </div>
+        
+        {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+        
+        <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2">
+          {loading ? (
+            <div className="py-4 text-center"><Loader2 className="animate-spin mx-auto text-sky" /></div>
+          ) : students.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">No students in this team.</p>
+          ) : (
+            students.map(s => (
+              <div key={s.id} className="flex flex-col sm:flex-row gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <input 
+                  defaultValue={s.nim} 
+                  onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name) }}
+                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  placeholder="NIM" 
+                />
+                <input 
+                  defaultValue={s.name} 
+                  onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value) }}
+                  className="flex-[2] w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  placeholder="Name" 
+                />
+                <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1" title="Remove student">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto">
+          <h4 className="text-sm font-medium mb-2">Add New Student</h4>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input 
+              value={newNim} onChange={e => setNewNim(e.target.value)}
+              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              placeholder="NIM" 
+            />
+            <input 
+              value={newName} onChange={e => setNewName(e.target.value)}
+              className="flex-[2] border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              placeholder="Name" 
+            />
+            <button 
+              onClick={handleAddStudent} disabled={adding}
+              className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              {adding ? 'Adding...' : 'Add'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -36,6 +36,13 @@ export async function getMyReviewTeams() {
   return { lecturerName: session.name, teams: teams || [] };
 }
 
+// Fetches the currently active semester's active_period (defaults to 'ATS' if
+// no active semester is set — matches the DB column default).
+async function getActivePeriod(): Promise<'ATS' | 'AAS'> {
+  const { data } = await supabaseAdmin.from('semesters').select('active_period').eq('is_active', true).maybeSingle();
+  return (data?.active_period as 'ATS' | 'AAS') || 'ATS';
+}
+
 export async function getTeamForGrading(teamId: string) {
   const session = await requireRole('lecturer');
 
@@ -49,6 +56,8 @@ export async function getTeamForGrading(teamId: string) {
     .maybeSingle();
   if (!assignment) return null;
 
+  const period = await getActivePeriod();
+
   const { data: team } = await supabaseAdmin.from('teams').select('*').eq('id', teamId).single();
 
   const { data: ts } = await supabaseAdmin
@@ -58,13 +67,17 @@ export async function getTeamForGrading(teamId: string) {
 
   const students = (ts || []).map((r: any) => r.students).filter(Boolean);
 
+  // Scoped to the active period only — switching ATS/AAS shows a fresh scoring
+  // form, since each period's grades are independent rows (unique on
+  // student_id, team_id, lecturer_id, period).
   const { data: grades } = await supabaseAdmin
     .from('grades')
     .select('*')
     .eq('team_id', teamId)
-    .eq('lecturer_id', session.id);
+    .eq('lecturer_id', session.id)
+    .eq('period', period);
 
-  return { team, students, grades: grades || [], lecturerId: session.id };
+  return { team, students, grades: grades || [], lecturerId: session.id, period };
 }
 
 const clampScore = (n: any) => Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
@@ -85,12 +98,15 @@ export async function saveGrades(
     .maybeSingle();
   if (!assignment) throw new Error('Not authorized for this team.');
 
+  const period = await getActivePeriod();
+
   // Refuse edits if already locked (defense in depth; UI also disables inputs).
   const { data: existingLocked } = await supabaseAdmin
     .from('grades')
     .select('is_locked')
     .eq('team_id', teamId)
     .eq('lecturer_id', session.id)
+    .eq('period', period)
     .eq('is_locked', true)
     .limit(1);
   if (existingLocked && existingLocked.length > 0 && !finalize) {
@@ -102,6 +118,7 @@ export async function saveGrades(
     student_id: e.studentId,
     team_id: teamId,
     lecturer_id: session.id,
+    period,
     implementation_score: clampScore(e.implementation_score),
     document_score: clampScore(e.document_score),
     english_score: clampScore(e.english_score),
@@ -111,10 +128,10 @@ export async function saveGrades(
     updated_at: now,
   }));
 
-  // One row per (student, reviewer) — upsert on the natural key.
+  // One row per (student, reviewer, period) — upsert on the natural key.
   const { error } = await supabaseAdmin
     .from('grades')
-    .upsert(rows, { onConflict: 'student_id,team_id,lecturer_id' });
+    .upsert(rows, { onConflict: 'student_id,team_id,lecturer_id,period' });
   if (error) throw new Error(error.message);
 
   revalidatePath(`/lecturer/team/${teamId}`);

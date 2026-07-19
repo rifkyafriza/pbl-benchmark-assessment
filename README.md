@@ -15,6 +15,7 @@ Web app replacing the Google Form-based PBL benchmark assessment workflow at Pol
 - **Team (PBL)** — has exactly one **Pimpro** (project lead lecturer, reference only) and up to **3 Reviewers** (distinct lecturers, no duplicates) who actually score students.
 - **Auth** — username + password only, no email, no SSO. One admin account; lecturer accounts are created/edited/reset by the admin.
 - **Scoring** — per student, per reviewer, per period: 3 scores (implementation, document, English communication) 0–5 + optional comment. Reviewer can lock/finalize; admin can unlock.
+- **Team Management (Soft/Hard Delete)** — Teams without any recorded grades are hard-deleted. Teams with grades are soft-deleted (`is_deleted=true`) to preserve historical data, keeping them out of the UI and exports. Soft-deleted teams are automatically restored if re-imported.
 - **Import** — two Excel templates (team+student+pimpro roster, and reviewer assignment with fuzzy username/full-name matching). All rows validated before any commit; any row failure aborts the whole import with a full error report.
 
 ## Getting started
