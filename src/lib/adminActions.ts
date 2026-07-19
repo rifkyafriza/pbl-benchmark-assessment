@@ -307,7 +307,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     seenTeamCodes.add(String(r['KODE']).trim());
   });
 
-  if (errors.length > 0) throw new Error(`Import aborted, no rows were applied. Errors:\n${errors.join('\n')}`);
+  if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
 
   // 1. Upsert pimpro lecturer accounts (username left null — admin sets credentials separately).
   const pimproNames = Array.from(new Set(rows.map((r) => String(r['PIMPRO']).trim())));
@@ -316,7 +316,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     let { data: user } = await supabaseAdmin.from('users').select('id').eq('name', name).eq('role', 'lecturer').maybeSingle();
     if (!user) {
       const { data, error } = await supabaseAdmin.from('users').insert({ name, role: 'lecturer' }).select('id').single();
-      if (error) throw new Error(`Import aborted while creating lecturer "${name}": ${error.message}`);
+      if (error) return { success: false, error: `Import aborted while creating lecturer "${name}": ${error.message}` };
       user = data;
     }
     lecturerMap.set(name, user!.id);
@@ -342,14 +342,14 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
         .insert({ academic_year_id: academicYearId, team_code: code, name: projectName })
         .select('id, is_deleted')
         .single();
-      if (error) throw new Error(`Import aborted while creating team "${code}": ${error.message}`);
+      if (error) return { success: false, error: `Import aborted while creating team "${code}": ${error.message}` };
       t = data;
     } else if (t.is_deleted) {
       const { error } = await supabaseAdmin
         .from('teams')
         .update({ is_deleted: false })
         .eq('id', t.id);
-      if (error) throw new Error(`Import aborted while restoring team "${code}": ${error.message}`);
+      if (error) return { success: false, error: `Import aborted while restoring team "${code}": ${error.message}` };
     }
     teamMap.set(uniqueKey, t!.id);
 
@@ -387,7 +387,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     let { data: s } = await supabaseAdmin.from('students').select('id').eq('nim', nim).maybeSingle();
     if (!s) {
       const { data, error } = await supabaseAdmin.from('students').insert(studentData).select('id').single();
-      if (error) throw new Error(`Import aborted while creating student "${nim}": ${error.message}`);
+      if (error) return { success: false, error: `Import aborted while creating student "${nim}": ${error.message}` };
       s = data;
     } else {
       // Always update student data so it reflects the latest imported excel (e.g. they moved to a new SEMESTER)
@@ -401,7 +401,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
   }
 
   revalidatePath('/admin');
-  return { teamsProcessed: teamRows.length, studentsProcessed: rows.length };
+  return { success: true, teamsProcessed: teamRows.length, studentsProcessed: rows.length };
 }
 
 // ---------- Import: reviewer assignments ----------
@@ -506,7 +506,7 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
     }
   }
 
-  if (errors.length > 0) throw new Error(`Import aborted, no rows were applied. Errors:\n${errors.join('\n')}`);
+  if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
 
   for (const { teamId, lecturerId } of toApply) {
     const { data: existing } = await supabaseAdmin
@@ -522,7 +522,7 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
   }
 
   revalidatePath('/admin');
-  return { rowsProcessed: rows.length, assignmentsApplied: toApply.length };
+  return { success: true, rowsProcessed: rows.length, assignmentsApplied: toApply.length };
 }
 
 // ---------- Export ----------

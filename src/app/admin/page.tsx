@@ -282,9 +282,13 @@ export default function AdminDashboard() {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(sheet);
         const result = await importTeamsTemplate(json as any, activeSemesterId);
-        alert(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
-        setTotalTeams(await getTeamCount(activeSemesterId));
-        setProgress(await getProgress(activeSemesterId));
+        if (result.success) {
+          alert(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
+          setTotalTeams(await getTeamCount(activeSemesterId));
+          setProgress(await getProgress(activeSemesterId));
+        } else {
+          alert('Import failed:\n' + result.error);
+        }
       } catch (err: any) {
         alert('Import failed:\n' + err.message);
       } finally {
@@ -309,8 +313,12 @@ export default function AdminDashboard() {
         const sheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(sheet);
         const result = await importReviewersTemplate(json as any, activeSemesterId);
-        alert(`Import complete: ${result.assignmentsApplied} reviewer assignments applied (${result.rowsProcessed} rows read).`);
-        setProgress(await getProgress(activeSemesterId));
+        if (result.success) {
+          alert(`Import complete: ${result.assignmentsApplied} reviewer assignments applied (${result.rowsProcessed} rows read).`);
+          setProgress(await getProgress(activeSemesterId));
+        } else {
+          alert('Import failed:\n' + result.error);
+        }
       } catch (err: any) {
         alert('Import failed:\n' + err.message);
       } finally {
