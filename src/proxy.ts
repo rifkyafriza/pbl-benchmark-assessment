@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/session';
 
 // Gate /admin/* (except /admin/login) and /lecturer/dashboard, /lecturer/team/*.
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = await verifySessionToken(token);

@@ -330,7 +330,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], semesterId: st
       const { data, error } = await supabaseAdmin
         .from('teams')
         .insert({ semester_id: semesterId, team_code: code, name: String(r.team_name).trim() })
-        .select('id')
+        .select('id, is_deleted')
         .single();
       if (error) throw new Error(`Import aborted while creating team "${code}": ${error.message}`);
       t = data;
