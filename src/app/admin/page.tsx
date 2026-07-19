@@ -72,18 +72,62 @@ export default function AdminDashboard() {
   }, [activeSemesterId]);
 
   const handlePimproChange = async (teamId: string, lecturerId: string) => {
+    const newPimpro = lecturerOptions.find(l => l.id === lecturerId);
+    setProgress(prev => prev.map(p => 
+      p.team_id === teamId 
+        ? { ...p, pimpro_id: newPimpro?.id || null, pimpro_name: newPimpro?.name || null } 
+        : p
+    ));
+    
     try {
       await setTeamAssignment(teamId, 'pimpro', lecturerId || null);
-      setProgress(await getProgress(activeSemesterId));
-    } catch (e: any) { alert('Error updating assignment: ' + e.message); }
+      getProgress(activeSemesterId).then(setProgress); // background sync
+    } catch (e: any) { 
+      alert('Error updating assignment: ' + e.message); 
+      getProgress(activeSemesterId).then(setProgress); // revert on error
+    }
   };
 
-  // slot's current lecturer_id (or null if slot is empty) -> new lecturer_id (or '' to clear).
   const handleReviewerChange = async (teamId: string, previousLecturerId: string | null, newLecturerId: string) => {
+    const newLecturer = lecturerOptions.find(l => l.id === newLecturerId);
+    
+    setProgress(prev => prev.map(p => {
+      if (p.team_id !== teamId) return p;
+      // Replace the slot where the previous reviewer was
+      const updatedReviewers = p.reviewers.map(r => {
+        if (r.lecturer_id === previousLecturerId) {
+          return {
+            ...r,
+            lecturer_id: newLecturer?.id || '',
+            lecturer_name: newLecturer?.name || 'Unknown',
+            // A new reviewer starts with 0 graded students. If they are swapped back, it will resync via the background fetch anyway.
+            graded_students: 0,
+            finalized_students: 0,
+            status: 'Not Started'
+          };
+        }
+        return r;
+      });
+      // If we are ADDING a new reviewer (previousLecturerId was null/empty)
+      if (!previousLecturerId && newLecturer) {
+        updatedReviewers.push({
+          lecturer_id: newLecturer.id,
+          lecturer_name: newLecturer.name,
+          graded_students: 0,
+          finalized_students: 0,
+          status: 'Not Started'
+        });
+      }
+      return { ...p, reviewers: updatedReviewers };
+    }));
+
     try {
       await setTeamReviewer(teamId, previousLecturerId, newLecturerId || null);
-      setProgress(await getProgress(activeSemesterId));
-    } catch (e: any) { alert('Error updating reviewer: ' + e.message); }
+      getProgress(activeSemesterId).then(setProgress); // background sync
+    } catch (e: any) { 
+      alert('Error updating reviewer: ' + e.message); 
+      getProgress(activeSemesterId).then(setProgress); // revert on error
+    }
   };
 
   const handleAddSemester = async () => {
