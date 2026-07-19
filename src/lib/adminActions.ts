@@ -126,24 +126,27 @@ export async function getProgress(academicYearId: string) {
   // Progress is always scoped to the semester's currently active period (ATS/AAS) —
   // the semester row is the single source of truth, so switching active_period alone
   // (no semester change) still yields fresh data on the caller's next fetch.
-  const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single();
+  const [
+    { data: semester },
+    { data: teams }
+  ] = await Promise.all([
+    supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single(),
+    supabaseAdmin.from('teams').select('id, name, team_code').eq('academic_year_id', academicYearId).eq('is_deleted', false)
+  ]);
   const period = semester?.active_period || 'ATS';
 
-  const { data: teams } = await supabaseAdmin
-    .from('teams')
-    .select('id, name, team_code')
-    .eq('academic_year_id', academicYearId)
-    .eq('is_deleted', false);
   if (!teams || teams.length === 0) return [];
   const teamIds = teams.map((t) => t.id);
 
-  const { data: assignments } = await supabaseAdmin
-    .from('team_lecturers')
-    .select('team_id, lecturer_id, role, users(name)')
-    .in('team_id', teamIds);
-
-  const { data: teamStudentCounts } = await supabaseAdmin.from('team_students').select('team_id, students(kelas)').in('team_id', teamIds);
-  const { data: grades } = await supabaseAdmin.from('grades').select('team_id, lecturer_id, is_locked').in('team_id', teamIds).eq('period', period);
+  const [
+    { data: assignments },
+    { data: teamStudentCounts },
+    { data: grades }
+  ] = await Promise.all([
+    supabaseAdmin.from('team_lecturers').select('team_id, lecturer_id, role, users(name)').in('team_id', teamIds),
+    supabaseAdmin.from('team_students').select('team_id, students(kelas)').in('team_id', teamIds),
+    supabaseAdmin.from('grades').select('team_id, lecturer_id, is_locked').in('team_id', teamIds).eq('period', period)
+  ]);
 
   const totalByTeam = new Map<string, number>();
   const kelasByTeam = new Map<string, string>();
@@ -390,7 +393,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
   
   const teamIds = Array.from(teamMap.values());
   if (teamIds.length > 0) {
-    const { data: existingPimproLinks, error: existingPimproLinksErr } = await supabaseAdmin.from('team_lecturers').select('id, team_id, lecturer_id').eq('role', 'pimpro').in('team_id', teamIds);
+    const { data: existingPimproLinks, error: existingPimproLinksErr } = await supabaseAdmin.from('team_lecturers').select('team_id, lecturer_id').eq('role', 'pimpro').in('team_id', teamIds);
     if (existingPimproLinksErr) return { success: false, error: `Failed to fetch existing pimpro links: ${existingPimproLinksErr.message}` };
     const existingPimproMap = new Map((existingPimproLinks || []).map(l => [l.team_id, l]));
     
@@ -399,7 +402,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
        const existing = existingPimproMap.get(link.team_id);
        if (existing) {
           if (existing.lecturer_id !== link.lecturer_id) {
-             await supabaseAdmin.from('team_lecturers').update({ lecturer_id: link.lecturer_id }).eq('id', existing.id);
+             await supabaseAdmin.from('team_lecturers').update({ lecturer_id: link.lecturer_id }).eq('team_id', existing.team_id).eq('role', 'pimpro');
           }
        } else {
           newPimproLinks.push(link);
