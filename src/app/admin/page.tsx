@@ -240,7 +240,7 @@ export default function AdminDashboard() {
   };
 
   const downloadTeamsTemplate = () => {
-    const rows = [{ semester_label: 'Genap 2025/2026', team_code: 'PBL-RE-001', team_name: 'KRAI', pimpro_name: 'Rifqi Amalya Fatekha', student_nim: '4222301008', student_name: 'Josua Hottua Harianja' }];
+    const rows = [{ 'TAHUN AJARAN': 'Genap 2025/2026', 'KODE': 'PBL-RE-001', 'JUDUL PROJECT': 'KRAI', 'PIMPRO': 'Rifqi Amalya Fatekha', 'PRODI': 'D4 Rekayasa Keamanan Siber', 'SEMESTER': 6, 'NIM': '4222301008', 'NAMA': 'Josua Hottua Harianja', 'KELAS': 'IF-1 A Pagi' }];
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'teams');
