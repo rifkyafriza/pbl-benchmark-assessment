@@ -152,17 +152,29 @@ export default function AdminDashboard() {
   };
 
   const handleSetActiveSemester = async (id: string) => {
-    await setActiveSemester(id);
+    const previousActive = activeSemesterId;
+    const previousSemesters = [...semesters];
     setSemesters(semesters.map((s) => ({ ...s, is_active: s.id === id })));
     setActiveSemesterId(id);
+    try {
+      await setActiveSemester(id);
+    } catch (e: any) {
+      alert('Error setting active semester: ' + e.message);
+      setSemesters(previousSemesters);
+      setActiveSemesterId(previousActive);
+    }
   };
 
   const handleSetActivePeriod = async (semesterId: string, period: 'ATS' | 'AAS') => {
+    const previousSemesters = [...semesters];
+    setSemesters(semesters.map((s) => (s.id === semesterId ? { ...s, active_period: period } : s)));
     try {
       await setActivePeriod(semesterId, period);
-      setSemesters(semesters.map((s) => (s.id === semesterId ? { ...s, active_period: period } : s)));
-      setProgress(await getProgress(semesterId));
-    } catch (e: any) { alert('Error setting active period: ' + e.message); }
+      getProgress(semesterId).then(setProgress);
+    } catch (e: any) { 
+      alert('Error setting active period: ' + e.message); 
+      setSemesters(previousSemesters);
+    }
   };
 
   const handleCreateLecturer = async () => {
@@ -187,19 +199,44 @@ export default function AdminDashboard() {
 
   const handleUnlock = async (teamId: string, lecturerId: string) => {
     if (!confirm('Unlock this reviewer\'s scores for this team?')) return;
+    
+    // Optimistic update
+    setProgress(prev => prev.map(p => {
+      if (p.team_id !== teamId) return p;
+      return {
+        ...p,
+        reviewers: p.reviewers.map(r => r.lecturer_id === lecturerId ? { ...r, status: 'Unlocked' } : r)
+      };
+    }));
+
     try {
       await unlockTeamReviewer(teamId, lecturerId, activeSemesterId);
-      setProgress(await getProgress(activeSemesterId));
-    } catch (e: any) { alert('Error: ' + e.message); }
+      // Background sync
+      getProgress(activeSemesterId).then(setProgress);
+    } catch (e: any) { 
+      alert('Error: ' + e.message); 
+      getProgress(activeSemesterId).then(setProgress);
+    }
   };
 
   const handleDeleteTeam = async (team: TeamProgress) => {
     if (!confirm(`Delete team "${team.team_name}" (${team.team_code})?\n\nIf the team has no grades, it will be permanently deleted. If it already has grades, it will be soft-deleted (hidden but preserved). Continue?`)) return;
+    
+    // Optimistic update
+    setProgress(prev => prev.filter(p => p.team_id !== team.team_id));
+    setTotalTeams(prev => prev - 1);
+
     try {
       await deleteTeam(team.team_id);
-      setTotalTeams(await getTeamCount(activeSemesterId));
-      setProgress(await getProgress(activeSemesterId));
-    } catch (e: any) { alert('Error deleting team: ' + e.message); }
+      // Background sync
+      getTeamCount(activeSemesterId).then(setTotalTeams);
+      getProgress(activeSemesterId).then(setProgress);
+    } catch (e: any) { 
+      alert('Error deleting team: ' + e.message); 
+      // Revert on error
+      getTeamCount(activeSemesterId).then(setTotalTeams);
+      getProgress(activeSemesterId).then(setProgress);
+    }
   };
 
   const downloadTeamsTemplate = () => {
