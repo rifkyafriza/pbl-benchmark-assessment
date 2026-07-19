@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, CheckCircle2, Loader2 } from 'lucide-react';
 import { saveGrades } from '@/lib/lecturerActions';
 
-type Student = { id: string; name: string; nim: string };
+type Student = { id: string; name: string; nim: string; kelas?: string | null };
 type GradeEntry = { implementation_score: number; document_score: number; english_score: number; comment: string };
 
 type ScoreKey = 'implementation_score' | 'document_score' | 'english_score';
@@ -53,6 +53,14 @@ export default function TeamGradingClient({
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(isLocked);
   const [error, setError] = useState('');
+  const [kelasFilter, setKelasFilter] = useState<string>('Semua');
+
+  const filteredStudents = students.filter(s => {
+    if (kelasFilter === 'Semua') return true;
+    if (kelasFilter === 'Pagi') return s.kelas?.toLowerCase().includes('pagi');
+    if (kelasFilter === 'Malam') return s.kelas?.toLowerCase().includes('malam');
+    return true;
+  });
 
   const update = <K extends keyof GradeEntry>(studentId: string, field: K, value: GradeEntry[K]) => {
     setGrades((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [field]: value } }));
@@ -100,9 +108,24 @@ export default function TeamGradingClient({
         )}
         {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-4 rounded-xl">{error}</div>}
 
-        <h2 className="text-lg font-semibold text-gray-800">Students ({students.length})</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-800">Students ({filteredStudents.length})</h2>
+          <div className="flex bg-gray-100 p-1 rounded-lg">
+            {['Semua', 'Pagi', 'Malam'].map((k) => (
+              <button
+                key={k}
+                onClick={() => setKelasFilter(k)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  kelasFilter === k ? 'bg-white text-sky shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {students.map((student) => {
+        {filteredStudents.map((student) => {
           const g = grades[student.id];
           return (
             <div key={student.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">

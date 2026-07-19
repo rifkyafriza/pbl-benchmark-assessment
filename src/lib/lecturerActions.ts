@@ -9,12 +9,12 @@ import { requireRole } from '@/lib/auth';
 export async function getMyReviewTeams() {
   const session = await requireRole('lecturer');
 
-  const { data: activeSemester } = await supabaseAdmin
-    .from('semesters')
+  const { data: activeAcademicYear } = await supabaseAdmin
+    .from('academic_years')
     .select('id')
     .eq('is_active', true)
     .maybeSingle();
-  if (!activeSemester) return { lecturerName: session.name, teams: [] as any[] };
+  if (!activeAcademicYear) return { lecturerName: session.name, teams: [] as any[] };
 
   const { data: assignments } = await supabaseAdmin
     .from('team_lecturers')
@@ -25,21 +25,34 @@ export async function getMyReviewTeams() {
   const teamIds = (assignments || []).map((a) => a.team_id);
   if (teamIds.length === 0) return { lecturerName: session.name, teams: [] as any[] };
 
+  const { data: teamStudentCounts } = await supabaseAdmin.from('team_students').select('team_id, students(kelas)').in('team_id', teamIds);
+  const kelasByTeam = new Map<string, string>();
+  (teamStudentCounts || []).forEach((r: any) => {
+    if (r.students?.kelas && !kelasByTeam.has(r.team_id)) {
+      kelasByTeam.set(r.team_id, r.students.kelas);
+    }
+  });
+
   const { data: teams } = await supabaseAdmin
     .from('teams')
     .select('id, name, team_code')
     .in('id', teamIds)
-    .eq('semester_id', activeSemester.id)
+    .eq('academic_year_id', activeAcademicYear.id)
     .eq('is_deleted', false)
     .order('team_code');
 
-  return { lecturerName: session.name, teams: teams || [] };
+  const teamsWithKelas = (teams || []).map(t => ({
+    ...t,
+    team_kelas: kelasByTeam.get(t.id) || null
+  }));
+
+  return { lecturerName: session.name, teams: teamsWithKelas };
 }
 
 // Fetches the currently active semester's active_period (defaults to 'ATS' if
 // no active semester is set — matches the DB column default).
 async function getActivePeriod(): Promise<'ATS' | 'AAS'> {
-  const { data } = await supabaseAdmin.from('semesters').select('active_period').eq('is_active', true).maybeSingle();
+  const { data } = await supabaseAdmin.from('academic_years').select('active_period').eq('is_active', true).maybeSingle();
   return (data?.active_period as 'ATS' | 'AAS') || 'ATS';
 }
 
@@ -62,7 +75,7 @@ export async function getTeamForGrading(teamId: string) {
 
   const { data: ts } = await supabaseAdmin
     .from('team_students')
-    .select('student_id, students(id, name, nim)')
+    .select('student_id, students(id, name, nim, kelas)')
     .eq('team_id', teamId);
 
   const students = (ts || []).map((r: any) => r.students).filter(Boolean);

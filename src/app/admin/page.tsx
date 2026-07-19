@@ -17,8 +17,8 @@ import ChangePasswordForm from '@/components/ChangePasswordForm';
 type Semester = { id: string; name: string; is_active: boolean; active_period: 'ATS' | 'AAS' };
 type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string };
 type TeamProgress = {
-  team_id: string; team_name: string; team_code: string; semester_id: string;
-  pimpro_id: string | null; pimpro_name: string | null;
+  team_id: string; team_name: string; team_code: string; academic_year_id: string;
+  pimpro_id: string | null; pimpro_name: string | null; team_kelas: string | null;
   total_students: number; reviewers: ReviewerProgress[];
 };
 type LecturerAccount = { id: string; name: string; username: string | null; initials: string | null };
@@ -37,6 +37,7 @@ export default function AdminDashboard() {
   const [newLecturerPassword, setNewLecturerPassword] = useState('');
   const [editingLecturer, setEditingLecturer] = useState<LecturerAccount | null>(null);
   const [editingTeam, setEditingTeam] = useState<TeamProgress | null>(null);
+  const [kelasFilter, setKelasFilter] = useState<string>('Semua');
 
   const [loading, setLoading] = useState(true);
   const [isImportingTeams, setIsImportingTeams] = useState(false);
@@ -142,7 +143,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteSemester = async (id: string) => {
-    if (!confirm('Delete this semester? This will not delete teams, but will orphan them.')) return;
+    if (!confirm('Delete this tahun ajaran? This will not delete teams, but will orphan them.')) return;
     try {
       await deleteSemester(id);
       setSemesters(semesters.filter((s) => s.id !== id));
@@ -218,11 +219,11 @@ export default function AdminDashboard() {
   };
 
   const exportGrades = async () => {
-    if (!activeSemesterId) return alert('Select an active semester first');
+    if (!activeSemesterId) return alert('Select an active tahun ajaran first');
     setIsExporting(true);
     try {
       const rows = await exportGradesData(activeSemesterId);
-      if (rows.length === 0) return alert('No data found for this semester');
+      if (rows.length === 0) return alert('No data found for this tahun ajaran');
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Grades');
@@ -288,7 +289,7 @@ export default function AdminDashboard() {
       <header className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-navy dark:text-sky-light">Admin Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400">Manage semesters, teams, lecturer accounts, and track review progress.</p>
+          <p className="text-gray-600 dark:text-gray-400">Manage tahun ajaran, teams, lecturer accounts, and track review progress.</p>
         </div>
         <div className="flex items-center gap-4">
           <ChangePasswordForm />
@@ -304,11 +305,11 @@ export default function AdminDashboard() {
       <section className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-4 mb-4">
           <div className="p-3 bg-orange/10 rounded-lg text-orange"><BookOpen size={24} /></div>
-          <h2 className="text-xl font-semibold">Semester Management</h2>
+          <h2 className="text-xl font-semibold">Tahun Ajaran Management</h2>
         </div>
         <div className="flex flex-col md:flex-row gap-8">
           <div className="flex-1">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">Available Semesters</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Available Tahun Ajaran</h3>
             <div className="space-y-2">
               {semesters.map((sem) => (
                 <div key={sem.id} className={`flex items-center justify-between p-3 rounded-lg border ${sem.is_active ? 'border-sky bg-sky/5' : 'border-gray-200 dark:border-gray-700'}`}>
@@ -337,11 +338,11 @@ export default function AdminDashboard() {
                   <button onClick={() => handleDeleteSemester(sem.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                 </div>
               ))}
-              {semesters.length === 0 && <p className="text-sm text-gray-500 italic">No semesters created yet.</p>}
+              {semesters.length === 0 && <p className="text-sm text-gray-500 italic">No tahun ajaran created yet.</p>}
             </div>
           </div>
           <div className="md:w-1/3 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-700 md:pl-8 pt-4 md:pt-0">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">Add New Semester</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Add New Tahun Ajaran</h3>
             <div className="flex gap-2">
               <input type="text" value={newSemesterName} onChange={(e) => setNewSemesterName(e.target.value)} placeholder="e.g. Ganjil 2026/2027" className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
               <button onClick={handleAddSemester} className="bg-navy hover:bg-navy-light text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><Plus size={16} /> Add</button>
@@ -431,7 +432,7 @@ export default function AdminDashboard() {
                 <input ref={reviewersFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleReviewersFileUpload} disabled={isImportingReviewers || !activeSemesterId} />
               </label>
             </div>
-            {!activeSemesterId && <p className="text-xs text-red-500">Please set an active semester first.</p>}
+            {!activeSemesterId && <p className="text-xs text-red-500">Please set an active tahun ajaran first.</p>}
           </div>
         </div>
 
@@ -440,7 +441,7 @@ export default function AdminDashboard() {
           <div>
             <div className="flex items-center gap-4 mb-4">
               <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><Users size={24} /></div>
-              <h2 className="text-xl font-semibold">Active Semester Stats</h2>
+              <h2 className="text-xl font-semibold">Active Tahun Ajaran Stats</h2>
             </div>
             <p className="text-4xl font-bold mb-1">{totalTeams}</p>
             <p className="text-sm text-gray-500 dark:text-gray-400">Total Teams for {semesters.find((s) => s.id === activeSemesterId)?.name || '...'}</p>
@@ -455,13 +456,24 @@ export default function AdminDashboard() {
       </div>
 
       <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <h2 className="text-xl font-semibold">Reviewer Grading Progress</h2>
-          {activeSemesterId && (
-            <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
-              Showing: {semesters.find((s) => s.id === activeSemesterId)?.name} — {semesters.find((s) => s.id === activeSemesterId)?.active_period}
-            </span>
-          )}
+          <div className="flex items-center gap-4">
+            <select
+              value={kelasFilter}
+              onChange={(e) => setKelasFilter(e.target.value)}
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm dark:bg-gray-700"
+            >
+              <option value="Semua">Semua Kelas</option>
+              <option value="Pagi">Kelas Pagi</option>
+              <option value="Malam">Kelas Malam</option>
+            </select>
+            {activeSemesterId && (
+              <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full whitespace-nowrap">
+                Showing: {semesters.find((s) => s.id === activeSemesterId)?.name} — {semesters.find((s) => s.id === activeSemesterId)?.active_period}
+              </span>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -479,9 +491,16 @@ export default function AdminDashboard() {
               {loading ? (
                 <tr><td colSpan={6} className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto text-sky" /></td></tr>
               ) : progress.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">No data available for this semester. Import teams and reviewer assignments first.</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-gray-500">No data available for this tahun ajaran. Import teams and reviewer assignments first.</td></tr>
               ) : (
-                progress.map((p) => {
+                progress
+                  .filter((p) => {
+                    if (kelasFilter === 'Semua') return true;
+                    if (kelasFilter === 'Pagi') return p.team_kelas?.toLowerCase().includes('pagi');
+                    if (kelasFilter === 'Malam') return p.team_kelas?.toLowerCase().includes('malam');
+                    return true;
+                  })
+                  .map((p) => {
                   // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
                   const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
                   return (
@@ -615,12 +634,15 @@ function LecturerEditModal({
 function TeamEditModal({
   team, onClose, onSaved,
 }: { team: TeamProgress; onClose: () => void; onSaved: () => void }) {
-  const [students, setStudents] = useState<{ id: string; nim: string; name: string }[]>([]);
+  const [students, setStudents] = useState<{ id: string; nim: string; name: string; prodi?: string; semester?: string; kelas?: string; }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
   const [newNim, setNewNim] = useState('');
   const [newName, setNewName] = useState('');
+  const [newProdi, setNewProdi] = useState('');
+  const [newSemester, setNewSemester] = useState('');
+  const [newKelas, setNewKelas] = useState('');
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -630,10 +652,10 @@ function TeamEditModal({
       .finally(() => setLoading(false));
   }, [team.team_id]);
 
-  const handleUpdateStudent = async (studentId: string, nim: string, name: string) => {
+  const handleUpdateStudent = async (studentId: string, nim: string, name: string, prodi: string, smt: string, kelas: string) => {
     try {
-      await updateStudent(studentId, nim, name);
-      setStudents(students.map(s => s.id === studentId ? { ...s, nim, name } : s));
+      await updateStudent(studentId, nim, name, prodi, smt, kelas);
+      setStudents(students.map(s => s.id === studentId ? { ...s, nim, name, prodi, smt, kelas } : s));
       onSaved();
     } catch (e: any) { alert(e.message); }
   };
@@ -642,10 +664,13 @@ function TeamEditModal({
     if (!newNim.trim() || !newName.trim()) return alert('NIM and Name required');
     setAdding(true);
     try {
-      await addStudentToTeam(team.team_id, newNim, newName);
+      await addStudentToTeam(team.team_id, newNim, newName, newProdi, newSemester, newKelas);
       setStudents(await getTeamStudents(team.team_id));
       setNewNim('');
       setNewName('');
+      setNewProdi('');
+      setNewSemester('');
+      setNewKelas('');
       onSaved();
     } catch (e: any) { alert(e.message); }
     finally { setAdding(false); }
@@ -662,7 +687,7 @@ function TeamEditModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-2xl w-full flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-4xl w-full flex flex-col max-h-[90vh]">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h3 className="text-lg font-semibold">Edit Team: {team.team_name}</h3>
@@ -683,15 +708,33 @@ function TeamEditModal({
               <div key={s.id} className="flex flex-col sm:flex-row gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <input 
                   defaultValue={s.nim} 
-                  onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name) }}
+                  onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name, s.prodi || '', s.semester || '', s.kelas || '') }}
                   className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
                   placeholder="NIM" 
                 />
                 <input 
                   defaultValue={s.name} 
-                  onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value) }}
+                  onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value, s.prodi || '', s.semester || '', s.kelas || '') }}
                   className="flex-[2] w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
                   placeholder="Name" 
+                />
+                <input 
+                  defaultValue={s.prodi || ''} 
+                  onBlur={(e) => { if (e.target.value !== (s.prodi || '')) handleUpdateStudent(s.id, s.nim, s.name, e.target.value, s.semester || '', s.kelas || '') }}
+                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  placeholder="Prodi" 
+                />
+                <input 
+                  defaultValue={s.semester || ''} 
+                  onBlur={(e) => { if (e.target.value !== (s.semester || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', e.target.value, s.kelas || '') }}
+                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  placeholder="Semester" 
+                />
+                <input 
+                  defaultValue={s.kelas || ''} 
+                  onBlur={(e) => { if (e.target.value !== (s.kelas || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value) }}
+                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  placeholder="Kelas" 
                 />
                 <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1" title="Remove student">
                   <Trash2 size={16} />
@@ -713,6 +756,21 @@ function TeamEditModal({
               value={newName} onChange={e => setNewName(e.target.value)}
               className="flex-[2] border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
               placeholder="Name" 
+            />
+            <input 
+              value={newProdi} onChange={e => setNewProdi(e.target.value)}
+              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              placeholder="Prodi" 
+            />
+            <input 
+              value={newSemester} onChange={e => setNewSemester(e.target.value)}
+              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              placeholder="Semester" 
+            />
+            <input 
+              value={newKelas} onChange={e => setNewKelas(e.target.value)}
+              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              placeholder="Kelas" 
             />
             <button 
               onClick={handleAddStudent} disabled={adding}

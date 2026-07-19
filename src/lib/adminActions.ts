@@ -6,15 +6,15 @@ import { requireRole, hashPassword } from '@/lib/auth';
 // ---------- Semesters ----------
 export async function listSemesters() {
   await requireRole('admin');
-  const { data } = await supabaseAdmin.from('semesters').select('*').order('name');
+  const { data } = await supabaseAdmin.from('academic_years').select('*').order('name');
   return data || [];
 }
 
 export async function addSemester(name: string) {
   await requireRole('admin');
-  const { data: existing } = await supabaseAdmin.from('semesters').select('id').limit(1);
+  const { data: existing } = await supabaseAdmin.from('academic_years').select('id').limit(1);
   const { error } = await supabaseAdmin
-    .from('semesters')
+    .from('academic_years')
     .insert({ name: name.trim(), is_active: !existing || existing.length === 0 });
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
@@ -22,24 +22,24 @@ export async function addSemester(name: string) {
 
 export async function deleteSemester(id: string) {
   await requireRole('admin');
-  const { error } = await supabaseAdmin.from('semesters').delete().eq('id', id);
+  const { error } = await supabaseAdmin.from('academic_years').delete().eq('id', id);
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
 
 export async function setActiveSemester(id: string) {
   await requireRole('admin');
-  await supabaseAdmin.from('semesters').update({ is_active: false }).neq('id', id);
-  await supabaseAdmin.from('semesters').update({ is_active: true }).eq('id', id);
+  await supabaseAdmin.from('academic_years').update({ is_active: false }).neq('id', id);
+  await supabaseAdmin.from('academic_years').update({ is_active: true }).eq('id', id);
   revalidatePath('/admin');
 }
 
 // Sets which assessment round (ATS = mid-semester, AAS = end-semester) is currently
 // active for a given semester. Per-semester, not global — each semester row tracks
 // its own active_period. Grades/progress everywhere filter by this value.
-export async function setActivePeriod(semesterId: string, period: 'ATS' | 'AAS') {
+export async function setActivePeriod(academicYearId: string, period: 'ATS' | 'AAS') {
   await requireRole('admin');
-  const { error } = await supabaseAdmin.from('semesters').update({ active_period: period }).eq('id', semesterId);
+  const { error } = await supabaseAdmin.from('academic_years').update({ active_period: period }).eq('id', academicYearId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
@@ -120,19 +120,19 @@ export async function deleteLecturerAccount(userId: string) {
 // without filtering by role, so a team's pimpro row was showing up mixed into
 // "reviewer" progress rows. Query reviewer assignments explicitly instead, and
 // bring in pimpro name as a separate column.
-export async function getProgress(semesterId: string) {
+export async function getProgress(academicYearId: string) {
   await requireRole('admin');
 
   // Progress is always scoped to the semester's currently active period (ATS/AAS) —
   // the semester row is the single source of truth, so switching active_period alone
   // (no semester change) still yields fresh data on the caller's next fetch.
-  const { data: semester } = await supabaseAdmin.from('semesters').select('active_period').eq('id', semesterId).single();
+  const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single();
   const period = semester?.active_period || 'ATS';
 
   const { data: teams } = await supabaseAdmin
     .from('teams')
     .select('id, name, team_code')
-    .eq('semester_id', semesterId)
+    .eq('academic_year_id', academicYearId)
     .eq('is_deleted', false);
   if (!teams || teams.length === 0) return [];
   const teamIds = teams.map((t) => t.id);
@@ -142,11 +142,17 @@ export async function getProgress(semesterId: string) {
     .select('team_id, lecturer_id, role, users(name)')
     .in('team_id', teamIds);
 
-  const { data: teamStudentCounts } = await supabaseAdmin.from('team_students').select('team_id').in('team_id', teamIds);
+  const { data: teamStudentCounts } = await supabaseAdmin.from('team_students').select('team_id, students(kelas)').in('team_id', teamIds);
   const { data: grades } = await supabaseAdmin.from('grades').select('team_id, lecturer_id, is_locked').in('team_id', teamIds).eq('period', period);
 
   const totalByTeam = new Map<string, number>();
-  (teamStudentCounts || []).forEach((r) => totalByTeam.set(r.team_id, (totalByTeam.get(r.team_id) || 0) + 1));
+  const kelasByTeam = new Map<string, string>();
+  (teamStudentCounts || []).forEach((r: any) => {
+    totalByTeam.set(r.team_id, (totalByTeam.get(r.team_id) || 0) + 1);
+    if (r.students?.kelas && !kelasByTeam.has(r.team_id)) {
+      kelasByTeam.set(r.team_id, r.students.kelas);
+    }
+  });
 
   const pimproByTeam = new Map<string, { id: string; name: string }>();
   const reviewerRows: { team_id: string; lecturer_id: string; lecturer_name: string }[] = [];
@@ -174,8 +180,9 @@ export async function getProgress(semesterId: string) {
     });
 
     return {
-      team_id: t.id, team_name: t.name, team_code: t.team_code, semester_id: semesterId,
+      team_id: t.id, team_name: t.name, team_code: t.team_code, academic_year_id: academicYearId,
       pimpro_id: pimpro?.id ?? null, pimpro_name: pimpro?.name ?? null,
+      team_kelas: kelasByTeam.get(t.id) ?? null,
       total_students: totalStudents, reviewers,
     };
   });
@@ -233,12 +240,12 @@ export async function setTeamReviewer(teamId: string, previousLecturerId: string
   revalidatePath('/admin');
 }
 
-export async function getTeamCount(semesterId: string) {
+export async function getTeamCount(academicYearId: string) {
   await requireRole('admin');
   const { count } = await supabaseAdmin
     .from('teams')
     .select('*', { count: 'exact', head: true })
-    .eq('semester_id', semesterId)
+    .eq('academic_year_id', academicYearId)
     .eq('is_deleted', false);
   return count || 0;
 }
@@ -246,9 +253,9 @@ export async function getTeamCount(semesterId: string) {
 // Unlocks a locked (team, reviewer) score-set so the reviewer can resubmit.
 // Scoped to the given semester's currently active period only — unlocking ATS
 // must never touch AAS grades for the same team+reviewer, and vice versa.
-export async function unlockTeamReviewer(teamId: string, lecturerId: string, semesterId: string) {
+export async function unlockTeamReviewer(teamId: string, lecturerId: string, academicYearId: string) {
   await requireRole('admin');
-  const { data: semester } = await supabaseAdmin.from('semesters').select('active_period').eq('id', semesterId).single();
+  const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single();
   const period = semester?.active_period || 'ATS';
   const { error } = await supabaseAdmin
     .from('grades')
@@ -261,17 +268,20 @@ export async function unlockTeamReviewer(teamId: string, lecturerId: string, sem
 }
 
 // ---------- Import: teams + students + pimpro ----------
-// Template columns: semester_label, team_code, team_name, pimpro_name, student_nim, student_name
+// Template columns: SEMESTER, KODE, JUDUL PROJECT, PIMPRO, PRODI, SEMESTER, NIM, NAMA, KELAS
 type TeamsImportRow = {
-  semester_label?: string;
-  team_code?: string;
-  team_name?: string;
-  pimpro_name?: string;
-  student_nim?: string | number;
-  student_name?: string;
+  'TAHUN AJARAN'?: string;
+  'KODE'?: string;
+  'JUDUL PROJECT'?: string;
+  'PIMPRO'?: string;
+  'PRODI'?: string;
+  'SEMESTER'?: string | number;
+  'NIM'?: string | number;
+  'NAMA'?: string;
+  'KELAS'?: string;
 };
 
-export async function importTeamsTemplate(rows: TeamsImportRow[], semesterId: string) {
+export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId: string) {
   await requireRole('admin');
 
   // Validate ALL rows first — abort entirely on any failure (no partial import).
@@ -280,29 +290,27 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], semesterId: st
   const seenStudents = new Set<string>();
   rows.forEach((r, i) => {
     const line = i + 2; // +1 header, +1 to make it 1-indexed data row
-    if (!r.team_code || !String(r.team_code).trim()) errors.push(`Row ${line}: missing team_code`);
-    if (!r.team_name || !String(r.team_name).trim()) errors.push(`Row ${line}: missing team_name`);
-    if (!r.pimpro_name || !String(r.pimpro_name).trim()) errors.push(`Row ${line}: missing pimpro_name`);
-    if (!r.student_nim || !String(r.student_nim).trim()) errors.push(`Row ${line}: missing student_nim`);
-    if (!r.student_name || !String(r.student_name).trim()) errors.push(`Row ${line}: missing student_name`);
-    if (!r.student_nim || !r.student_name) return;
+    if (!r['KODE'] || !String(r['KODE']).trim()) errors.push(`Row ${line}: missing KODE`);
+    if (!r['JUDUL PROJECT'] || !String(r['JUDUL PROJECT']).trim()) errors.push(`Row ${line}: missing JUDUL PROJECT`);
+    if (!r['PIMPRO'] || !String(r['PIMPRO']).trim()) errors.push(`Row ${line}: missing PIMPRO`);
+    if (!r['NIM'] || !String(r['NIM']).trim()) errors.push(`Row ${line}: missing NIM`);
+    if (!r['NAMA'] || !String(r['NAMA']).trim()) errors.push(`Row ${line}: missing NAMA`);
+    if (!r['NIM'] || !r['NAMA']) return;
 
-    const nim = String(r.student_nim).trim();
-    const name = String(r.student_name).trim();
+    const nim = String(r['NIM']).trim();
+    const name = String(r['NAMA']).trim();
     const studentKey = `${nim}::${name}`;
     if (seenStudents.has(studentKey)) {
       errors.push(`Row ${line}: duplicate student NIM "${nim}" and Name "${name}" already listed in this file`);
     }
     seenStudents.add(studentKey);
-    seenTeamCodes.add(String(r.team_code).trim());
+    seenTeamCodes.add(String(r['KODE']).trim());
   });
-
-
 
   if (errors.length > 0) throw new Error(`Import aborted, no rows were applied. Errors:\n${errors.join('\n')}`);
 
   // 1. Upsert pimpro lecturer accounts (username left null — admin sets credentials separately).
-  const pimproNames = Array.from(new Set(rows.map((r) => String(r.pimpro_name).trim())));
+  const pimproNames = Array.from(new Set(rows.map((r) => String(r['PIMPRO']).trim())));
   const lecturerMap = new Map<string, string>();
   for (const name of pimproNames) {
     let { data: user } = await supabaseAdmin.from('users').select('id').eq('name', name).eq('role', 'lecturer').maybeSingle();
@@ -314,22 +322,24 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], semesterId: st
     lecturerMap.set(name, user!.id);
   }
 
-  // 2. Upsert teams (unique per semester_id + team_code) — duplicate team_code rows in
-  // the file all resolve to the same DB team via this map, so no duplicate teams are created.
-  const teamRows = Array.from(new Map(rows.map((r) => [String(r.team_code).trim(), r])).values());
+  // 2. Upsert teams (unique per academic_year_id + team_code + name)
+  const teamRows = Array.from(new Map(rows.map((r) => [`${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`, r])).values());
   const teamMap = new Map<string, string>();
   for (const r of teamRows) {
-    const code = String(r.team_code).trim();
+    const code = String(r['KODE']).trim();
+    const projectName = String(r['JUDUL PROJECT']).trim();
+    const uniqueKey = `${code}_${projectName}`;
     let { data: t } = await supabaseAdmin
       .from('teams')
       .select('id, is_deleted')
-      .eq('semester_id', semesterId)
+      .eq('academic_year_id', academicYearId)
       .eq('team_code', code)
+      .eq('name', projectName)
       .maybeSingle();
     if (!t) {
       const { data, error } = await supabaseAdmin
         .from('teams')
-        .insert({ semester_id: semesterId, team_code: code, name: String(r.team_name).trim() })
+        .insert({ academic_year_id: academicYearId, team_code: code, name: projectName })
         .select('id, is_deleted')
         .single();
       if (error) throw new Error(`Import aborted while creating team "${code}": ${error.message}`);
@@ -337,16 +347,16 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], semesterId: st
     } else if (t.is_deleted) {
       const { error } = await supabaseAdmin
         .from('teams')
-        .update({ is_deleted: false, name: String(r.team_name).trim() })
+        .update({ is_deleted: false })
         .eq('id', t.id);
       if (error) throw new Error(`Import aborted while restoring team "${code}": ${error.message}`);
     }
-    teamMap.set(code, t!.id);
+    teamMap.set(uniqueKey, t!.id);
 
     // Ensure pimpro assignment (role='pimpro' only — must never also create a
     // role='reviewer' row; reviewer assignment comes solely from the separate
     // reviewer-import template or manual admin edits on the progress table).
-    const lecturerId = lecturerMap.get(String(r.pimpro_name).trim());
+    const lecturerId = lecturerMap.get(String(r['PIMPRO']).trim());
     const { data: existingPimpro } = await supabaseAdmin
       .from('team_lecturers')
       .select('id, lecturer_id')
@@ -365,14 +375,25 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], semesterId: st
 
   // 3. Upsert students + link to team.
   for (const r of rows) {
-    const nim = String(r.student_nim).trim();
+    const nim = String(r['NIM']).trim();
+    const studentData = {
+      nim,
+      name: String(r['NAMA']).trim(),
+      prodi: r['PRODI'] ? String(r['PRODI']).trim() : null,
+      semester: r['SEMESTER'] ? String(r['SEMESTER']).trim() : null,
+      kelas: r['KELAS'] ? String(r['KELAS']).trim() : null,
+    };
+    
     let { data: s } = await supabaseAdmin.from('students').select('id').eq('nim', nim).maybeSingle();
     if (!s) {
-      const { data, error } = await supabaseAdmin.from('students').insert({ nim, name: String(r.student_name).trim() }).select('id').single();
+      const { data, error } = await supabaseAdmin.from('students').insert(studentData).select('id').single();
       if (error) throw new Error(`Import aborted while creating student "${nim}": ${error.message}`);
       s = data;
+    } else {
+      // Always update student data so it reflects the latest imported excel (e.g. they moved to a new SEMESTER)
+      await supabaseAdmin.from('students').update(studentData).eq('id', s.id);
     }
-    const teamId = teamMap.get(String(r.team_code).trim());
+    const teamId = teamMap.get(`${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`);
     const { data: link } = await supabaseAdmin.from('team_students').select('team_id').eq('team_id', teamId).eq('student_id', s!.id).maybeSingle();
     if (!link) {
       await supabaseAdmin.from('team_students').insert({ team_id: teamId, student_id: s!.id });
@@ -425,7 +446,7 @@ function resolveLecturer(
   return { error: `"${value}" matches multiple lecturers ambiguously (${candidates.map((c) => c.name).join(', ')}) — use a username or fuller name` };
 }
 
-export async function importReviewersTemplate(rows: ReviewersImportRow[], semesterId: string) {
+export async function importReviewersTemplate(rows: ReviewersImportRow[], academicYearId: string) {
   await requireRole('admin');
 
   const { data: lecturers } = await supabaseAdmin.from('users').select('id, name, username').eq('role', 'lecturer');
@@ -445,7 +466,7 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], semest
     }
     const code = String(r.team_code).trim();
     if (!teamCodeCache.has(code)) {
-      const { data: t } = await supabaseAdmin.from('teams').select('id').eq('semester_id', semesterId).eq('team_code', code).maybeSingle();
+      const { data: t } = await supabaseAdmin.from('teams').select('id').eq('academic_year_id', academicYearId).eq('team_code', code).maybeSingle();
       teamCodeCache.set(code, t?.id ?? null);
     }
     const teamId = teamCodeCache.get(code);
@@ -498,13 +519,13 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], semest
 
 // ---------- Export ----------
 // Exports grades for the currently active period (ATS or AAS) for the semester.
-export async function exportGradesData(semesterId: string) {
+export async function exportGradesData(academicYearId: string) {
   await requireRole('admin');
 
-  const { data: semester } = await supabaseAdmin.from('semesters').select('active_period').eq('id', semesterId).single();
+  const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single();
   const activePeriod = semester?.active_period || 'ATS';
 
-  const { data: teams } = await supabaseAdmin.from('teams').select('id, name, team_code').eq('semester_id', semesterId).eq('is_deleted', false);
+  const { data: teams } = await supabaseAdmin.from('teams').select('id, name, team_code').eq('academic_year_id', academicYearId).eq('is_deleted', false);
   if (!teams || teams.length === 0) return [];
   const teamIds = teams.map((t) => t.id);
 
@@ -591,37 +612,53 @@ export async function getTeamStudents(teamId: string) {
   await requireRole('admin');
   const { data: teamStudents, error } = await supabaseAdmin
     .from('team_students')
-    .select('student_id, students(nim, name)')
+    .select('student_id, students(nim, name, prodi, semester, kelas)')
     .eq('team_id', teamId);
   if (error) throw new Error(error.message);
   return (teamStudents || []).map((ts: any) => ({
     id: ts.student_id,
     nim: ts.students.nim,
     name: ts.students.name,
+    prodi: ts.students.prodi,
+    semester: ts.students.semester,
+    kelas: ts.students.kelas,
   }));
 }
 
-export async function updateStudent(studentId: string, nim: string, name: string) {
+export async function updateStudent(studentId: string, nim: string, name: string, prodi?: string, semester?: string, kelas?: string) {
   await requireRole('admin');
-  const { error } = await supabaseAdmin.from('students').update({ nim: nim.trim(), name: name.trim() }).eq('id', studentId);
+  const { error } = await supabaseAdmin.from('students').update({ 
+    nim: nim.trim(), 
+    name: name.trim(),
+    prodi: prodi?.trim() || null,
+    semester: semester?.trim() || null,
+    kelas: kelas?.trim() || null
+  }).eq('id', studentId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
 
-export async function addStudentToTeam(teamId: string, nim: string, name: string) {
+export async function addStudentToTeam(teamId: string, nim: string, name: string, prodi?: string, semester?: string, kelas?: string) {
   await requireRole('admin');
   const cleanNim = nim.trim();
   const cleanName = name.trim();
+  const studentData = {
+    nim: cleanNim,
+    name: cleanName,
+    prodi: prodi?.trim() || null,
+    semester: semester?.trim() || null,
+    kelas: kelas?.trim() || null
+  };
   
   // Find or create student
   let { data: student } = await supabaseAdmin.from('students').select('id').eq('nim', cleanNim).maybeSingle();
   if (!student) {
-    const { data, error } = await supabaseAdmin.from('students').insert({ nim: cleanNim, name: cleanName }).select('id').single();
+    const { data, error } = await supabaseAdmin.from('students').insert(studentData).select('id').single();
     if (error) throw new Error(error.message);
     student = data;
   } else {
     // Optionally update name if different, but let's just use existing for now
-    await supabaseAdmin.from('students').update({ name: cleanName }).eq('id', student.id);
+    await supabaseAdmin.from('students').update(studentData).eq('id', student.id);
   }
 
   // Link to team
