@@ -733,7 +733,7 @@ function TeamEditModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-4xl w-full flex flex-col max-h-[90vh]">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold">Edit Team: {team.team_name}</h3>
             <p className="text-sm text-gray-500">{team.team_code}</p>
@@ -741,9 +741,9 @@ function TeamEditModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 font-bold p-2">&times;</button>
         </div>
         
-        {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+        {error && <p className="text-sm text-red-500 mb-4 flex-shrink-0">{error}</p>}
         
-        <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2">
+        <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 min-h-0">
           {loading ? (
             <div className="py-4 text-center"><Loader2 className="animate-spin mx-auto text-sky" /></div>
           ) : students.length === 0 ? (
@@ -791,7 +791,7 @@ function TeamEditModal({
           )}
         </div>
 
-        <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto">
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto flex-shrink-0">
           <h4 className="text-sm font-medium mb-2">Add New Student</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2">
             <input 
