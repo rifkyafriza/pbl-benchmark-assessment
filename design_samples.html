@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polibatam Design Samples</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --poli-navy: #1f3763;
+            --poli-blue: #4dbcd6;
+            --poli-orange: #f56623;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px; /* Mobile width */
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            padding: 15px 20px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .content {
+            padding: 20px;
+        }
+
+        .student-name {
+            font-weight: 700;
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+        }
+
+        .student-id {
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .rubric-item {
+            margin-bottom: 15px;
+        }
+
+        .rubric-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .score-pills {
+            display: flex;
+            gap: 5px;
+            justify-content: space-between;
+        }
+
+        .pill {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-save {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 1rem;
+            margin-top: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        /* Option 1: Clean & Academic */
+        .opt-1 {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+        }
+        .opt-1 .header {
+            background-color: var(--poli-navy);
+            color: white;
+        }
+        .opt-1 .student-name { color: var(--poli-navy); }
+        .opt-1 .student-id { color: #6b7280; }
+        .opt-1 .rubric-label { color: #374151; }
+        .opt-1 .pill {
+            background-color: #f3f4f6;
+            border: 1px solid #d1d5db;
+            color: #4b5563;
+        }
+        .opt-1 .pill.active {
+            background-color: var(--poli-blue);
+            color: white;
+            border-color: var(--poli-blue);
+        }
+        .opt-1 .btn-save {
+            background-color: var(--poli-orange);
+            color: white;
+        }
+        .opt-1 .btn-save:hover { background-color: #d95a1e; }
+
+        /* Option 2: Modern Glassmorphism */
+        .opt-2-wrapper {
+            width: 100%;
+            max-width: 400px;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            padding: 20px;
+            border-radius: 20px;
+            box-sizing: border-box;
+        }
+        .opt-2 {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px rgba(31, 55, 99, 0.1);
+            border-radius: 20px;
+            width: 100%;
+        }
+        .opt-2 .header {
+            color: var(--poli-navy);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .opt-2 .student-name { color: var(--poli-navy); }
+        .opt-2 .student-id { color: #475569; }
+        .opt-2 .rubric-label { color: var(--poli-navy); }
+        .opt-2 .pill {
+            background: rgba(255, 255, 255, 0.5);
+            color: var(--poli-navy);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        .opt-2 .pill.active {
+            background: var(--poli-blue);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 10px rgba(77, 188, 214, 0.4);
+        }
+        .opt-2 .btn-save {
+            background: var(--poli-navy);
+            color: white;
+            box-shadow: 0 4px 15px rgba(31, 55, 99, 0.2);
+        }
+
+        /* Option 3: Sleek Dark Mode */
+        .opt-3 {
+            background-color: #0f172a; /* Very dark slate */
+            border: 1px solid #1e293b;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .opt-3 .header {
+            background-color: var(--poli-navy);
+            color: #f8fafc;
+            border-bottom: 1px solid #1e293b;
+        }
+        .opt-3 .student-name { color: #f8fafc; }
+        .opt-3 .student-id { color: #94a3b8; }
+        .opt-3 .rubric-label { color: #e2e8f0; }
+        .opt-3 .pill {
+            background-color: #1e293b;
+            color: #94a3b8;
+            border: 1px solid #334155;
+        }
+        .opt-3 .pill.active {
+            background-color: var(--poli-blue);
+            color: #0f172a;
+            border-color: var(--poli-blue);
+        }
+        .opt-3 .btn-save {
+            background-color: var(--poli-orange);
+            color: white;
+        }
+
+        .title-label {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #1f2937;
+            text-align: center;
+            margin-bottom: -30px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="title-label">Option 1: Clean & Academic</div>
+    <div class="container opt-1">
+        <div class="header">Grade Student</div>
+        <div class="content">
+            <div class="student-name">Budi Santoso</div>
+            <div class="student-id">Team: PBL-RE-001 KRAI</div>
+            
+            <div class="rubric-item">
+                <span class="rubric-label">b7. Implementation</span>
+                <div class="score-pills">
+                    <div class="pill">0</div>
+                    <div class="pill">1</div>
+                    <div class="pill">2</div>
+                    <div class="pill active">3</div>
+                    <div class="pill">4</div>
+                    <div class="pill">5</div>
+                </div>
+            </div>
+
+            <button class="btn-save">Save Draft</button>
+        </div>
+    </div>
+
+    <div class="title-label">Option 2: Modern Glassmorphism</div>
+    <div class="opt-2-wrapper">
+        <div class="opt-2">
+            <div class="header">Grade Student</div>
+            <div class="content">
+                <div class="student-name">Budi Santoso</div>
+                <div class="student-id">Team: PBL-RE-001 KRAI</div>
+                
+                <div class="rubric-item">
+                    <span class="rubric-label">b7. Implementation</span>
+                    <div class="score-pills">
+                        <div class="pill">0</div>
+                        <div class="pill">1</div>
+                        <div class="pill">2</div>
+                        <div class="pill active">3</div>
+                        <div class="pill">4</div>
+                        <div class="pill">5</div>
+                    </div>
+                </div>
+
+                <button class="btn-save">Save Draft</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="title-label">Option 3: Sleek Dark Mode</div>
+    <div class="container opt-3">
+        <div class="header">Grade Student</div>
+        <div class="content">
+            <div class="student-name">Budi Santoso</div>
+            <div class="student-id">Team: PBL-RE-001 KRAI</div>
+            
+            <div class="rubric-item">
+                <span class="rubric-label">b7. Implementation</span>
+                <div class="score-pills">
+                    <div class="pill">0</div>
+                    <div class="pill">1</div>
+                    <div class="pill">2</div>
+                    <div class="pill active">3</div>
+                    <div class="pill">4</div>
+                    <div class="pill">5</div>
+                </div>
+            </div>
+
+            <button class="btn-save">Save Draft</button>
+        </div>
+    </div>
+
+</body>
+</html>
