@@ -390,7 +390,8 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
   
   const teamIds = Array.from(teamMap.values());
   if (teamIds.length > 0) {
-    const { data: existingPimproLinks } = await supabaseAdmin.from('team_lecturers').select('id, team_id, lecturer_id').eq('role', 'pimpro').in('team_id', teamIds);
+    const { data: existingPimproLinks, error: existingPimproLinksErr } = await supabaseAdmin.from('team_lecturers').select('id, team_id, lecturer_id').eq('role', 'pimpro').in('team_id', teamIds);
+    if (existingPimproLinksErr) return { success: false, error: `Failed to fetch existing pimpro links: ${existingPimproLinksErr.message}` };
     const existingPimproMap = new Map((existingPimproLinks || []).map(l => [l.team_id, l]));
     
     const newPimproLinks = [];
@@ -406,7 +407,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     }
     if (newPimproLinks.length > 0) {
        const { error: insertPimproErr } = await supabaseAdmin.from('team_lecturers').insert(newPimproLinks);
-       if (insertPimproErr) return { success: false, error: 'Failed to assign pimpros' };
+       if (insertPimproErr) return { success: false, error: `Failed to assign pimpros: ${insertPimproErr.message}` };
     }
   }
 
@@ -414,7 +415,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
   const allNims = Array.from(new Set(rows.map(r => String(r['NIM']).trim())));
   // If nims > 1000, we should chunk it, but 510 is fine.
   const { data: existingStudents, error: existingStudentsErr } = await supabaseAdmin.from('students').select('id, nim').in('nim', allNims);
-  if (existingStudentsErr) return { success: false, error: 'Failed to fetch students' };
+  if (existingStudentsErr) return { success: false, error: `Failed to fetch students: ${existingStudentsErr.message}` };
   
   const existingStudentMap = new Map((existingStudents || []).map(s => [s.nim, s.id]));
   const studentsToInsert = [];
@@ -460,13 +461,14 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
   }
   
   if (teamIds.length > 0) {
-    const { data: existingStudentLinks } = await supabaseAdmin.from('team_students').select('team_id, student_id').in('team_id', teamIds);
+    const { data: existingStudentLinks, error: existingStudentLinksErr } = await supabaseAdmin.from('team_students').select('team_id, student_id').in('team_id', teamIds);
+    if (existingStudentLinksErr) return { success: false, error: `Failed to fetch existing student links: ${existingStudentLinksErr.message}` };
     const existingStudentLinkSet = new Set((existingStudentLinks || []).map(l => `${l.team_id}_${l.student_id}`));
     
     const newStudentLinks = studentTeamLinks.filter(l => !existingStudentLinkSet.has(`${l.team_id}_${l.student_id}`));
     if (newStudentLinks.length > 0) {
        const { error: insertStudentLinkErr } = await supabaseAdmin.from('team_students').insert(newStudentLinks);
-       if (insertStudentLinkErr) return { success: false, error: 'Failed to insert team-student links' };
+       if (insertStudentLinkErr) return { success: false, error: `Failed to insert team-student links: ${insertStudentLinkErr.message}` };
     }
   }
 
