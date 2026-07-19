@@ -16,7 +16,7 @@ export default function TeamList({ teams }: { teams: any[] }) {
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-medium text-gray-700">Select a team to review</h2>
+        <h2 className="text-lg font-medium text-gray-700 dark:text-gray-200">Select a team to review</h2>
         <select
           value={kelasFilter}
           onChange={(e) => setKelasFilter(e.target.value)}
@@ -30,20 +30,20 @@ export default function TeamList({ teams }: { teams: any[] }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredTeams.length === 0 ? (
-          <div className="col-span-full p-8 text-center text-gray-500 bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="col-span-full p-8 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
             {teams.length === 0 ? 'No teams assigned to you as reviewer for the active semester.' : 'No teams match the selected class filter.'}
           </div>
         ) : (
           filteredTeams.map((team: any) => (
-            <Link key={team.id} href={`/lecturer/team/${team.id}`} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-sky hover:shadow-md transition-all cursor-pointer group block">
+            <Link key={team.id} href={`/lecturer/team/${team.id}`} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-sky hover:shadow-md transition-all cursor-pointer group block">
               <div className="flex justify-between items-start mb-4">
                 <div className="p-3 bg-sky/10 text-sky rounded-lg">
                   <BookOpen size={24} />
                 </div>
-                <ChevronRight className="text-gray-300 group-hover:text-sky transition-colors" />
+                <ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-sky transition-colors" />
               </div>
-              <p className="text-xs text-gray-500 font-medium">{team.team_code} {team.team_kelas ? `— ${team.team_kelas}` : ''}</p>
-              <h2 className="text-lg font-bold text-gray-900 mb-1">{team.name}</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{team.team_code} {team.team_kelas ? `— ${team.team_kelas}` : ''}</p>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{team.name}</h2>
             </Link>
           ))
         )}

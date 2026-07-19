@@ -30,7 +30,7 @@ export default function ChangePasswordForm() {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="text-gray-500 hover:text-sky flex items-center gap-1 text-sm font-medium">
+      <button onClick={() => setOpen(true)} className="text-gray-500 dark:text-gray-400 hover:text-sky dark:hover:text-sky-light flex items-center gap-1 text-sm font-medium">
         <KeyRound size={16} /> Change Password
       </button>
     );
