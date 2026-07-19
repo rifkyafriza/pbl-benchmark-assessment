@@ -248,7 +248,7 @@ export default function AdminDashboard() {
   };
 
   const downloadReviewersTemplate = () => {
-    const rows = [{ semester_label: 'Genap 2025/2026', team_code: 'PBL-RE-001', reviewer_1: 'budi.s', reviewer_2: 'Eko Rudiawan', reviewer_3: '' }];
+    const rows = [{ 'TAHUN AJARAN': 'Genap 2025/2026', 'KODE': 'PBL-RE-001', 'JUDUL PROJECT': 'KRAI', 'REVIEWER 1': 'budi.s', 'REVIEWER 2': 'Eko Rudiawan', 'REVIEWER 3': '' }];
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'reviewers');

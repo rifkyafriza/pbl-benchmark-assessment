@@ -408,11 +408,12 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
 // Template columns: semester_label, team_code, reviewer_1, reviewer_2, reviewer_3
 // Each reviewer cell accepts a username OR a full/partial lecturer name (fuzzy match).
 type ReviewersImportRow = {
-  semester_label?: string;
-  team_code?: string;
-  reviewer_1?: string;
-  reviewer_2?: string;
-  reviewer_3?: string;
+  'TAHUN AJARAN'?: string;
+  'KODE'?: string;
+  'JUDUL PROJECT'?: string;
+  'REVIEWER 1'?: string;
+  'REVIEWER 2'?: string;
+  'REVIEWER 3'?: string;
 };
 
 // Normalize for matching: lowercase, collapse whitespace.
@@ -460,25 +461,32 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const line = i + 2;
-    if (!r.team_code || !String(r.team_code).trim()) {
-      errors.push(`Row ${line}: missing team_code`);
+    if (!r['KODE'] || !String(r['KODE']).trim()) {
+      errors.push(`Row ${line}: missing KODE`);
       continue;
     }
-    const code = String(r.team_code).trim();
-    if (!teamCodeCache.has(code)) {
-      const { data: t } = await supabaseAdmin.from('teams').select('id').eq('academic_year_id', academicYearId).eq('team_code', code).maybeSingle();
-      teamCodeCache.set(code, t?.id ?? null);
+    const code = String(r['KODE']).trim();
+    const projectName = r['JUDUL PROJECT'] ? String(r['JUDUL PROJECT']).trim() : '';
+    const uniqueKey = `${code}_${projectName}`;
+    
+    if (!teamCodeCache.has(uniqueKey)) {
+      let query = supabaseAdmin.from('teams').select('id').eq('academic_year_id', academicYearId).eq('team_code', code);
+      if (projectName) {
+        query = query.eq('name', projectName);
+      }
+      const { data: t } = await query.maybeSingle();
+      teamCodeCache.set(uniqueKey, t?.id ?? null);
     }
-    const teamId = teamCodeCache.get(code);
+    const teamId = teamCodeCache.get(uniqueKey);
     if (!teamId) {
-      errors.push(`Row ${line}: team_code "${code}" not found in this semester`);
+      errors.push(`Row ${line}: team "${code}" with project "${projectName}" not found in this tahun ajaran`);
       continue;
     }
 
     const slots: { label: string; value?: string }[] = [
-      { label: 'reviewer_1', value: r.reviewer_1 },
-      { label: 'reviewer_2', value: r.reviewer_2 },
-      { label: 'reviewer_3', value: r.reviewer_3 },
+      { label: 'REVIEWER 1', value: r['REVIEWER 1'] },
+      { label: 'REVIEWER 2', value: r['REVIEWER 2'] },
+      { label: 'REVIEWER 3', value: r['REVIEWER 3'] },
     ];
     const rowLecturerIds = new Set<string>();
     for (const slot of slots) {
