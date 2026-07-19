@@ -750,40 +750,42 @@ function TeamEditModal({
             <p className="text-sm text-gray-500 italic">No students in this team.</p>
           ) : (
             students.map(s => (
-              <div key={s.id} className="flex flex-col sm:flex-row gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div key={s.id} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
                 <input 
                   defaultValue={s.nim} 
                   onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name, s.prodi || '', s.semester || '', s.kelas || '') }}
-                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
                   placeholder="NIM" 
                 />
                 <input 
                   defaultValue={s.name} 
                   onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value, s.prodi || '', s.semester || '', s.kelas || '') }}
-                  className="flex-[2] w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
                   placeholder="Name" 
                 />
                 <input 
                   defaultValue={s.prodi || ''} 
                   onBlur={(e) => { if (e.target.value !== (s.prodi || '')) handleUpdateStudent(s.id, s.nim, s.name, e.target.value, s.semester || '', s.kelas || '') }}
-                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
                   placeholder="Prodi" 
                 />
                 <input 
                   defaultValue={s.semester || ''} 
                   onBlur={(e) => { if (e.target.value !== (s.semester || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', e.target.value, s.kelas || '') }}
-                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
                   placeholder="Semester" 
                 />
-                <input 
-                  defaultValue={s.kelas || ''} 
-                  onBlur={(e) => { if (e.target.value !== (s.kelas || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value) }}
-                  className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
-                  placeholder="Kelas" 
-                />
-                <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1" title="Remove student">
-                  <Trash2 size={16} />
-                </button>
+                <div className="md:col-span-3 flex gap-2 w-full">
+                  <input 
+                    defaultValue={s.kelas || ''} 
+                    onBlur={(e) => { if (e.target.value !== (s.kelas || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value) }}
+                    className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                    placeholder="Kelas" 
+                  />
+                  <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1 flex-shrink-0" title="Remove student">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -791,38 +793,40 @@ function TeamEditModal({
 
         <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto">
           <h4 className="text-sm font-medium mb-2">Add New Student</h4>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2">
             <input 
               value={newNim} onChange={e => setNewNim(e.target.value)}
-              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
               placeholder="NIM" 
             />
             <input 
               value={newName} onChange={e => setNewName(e.target.value)}
-              className="flex-[2] border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
               placeholder="Name" 
             />
             <input 
               value={newProdi} onChange={e => setNewProdi(e.target.value)}
-              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
               placeholder="Prodi" 
             />
             <input 
               value={newSemester} onChange={e => setNewSemester(e.target.value)}
-              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+              className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
               placeholder="Semester" 
             />
-            <input 
-              value={newKelas} onChange={e => setNewKelas(e.target.value)}
-              className="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
-              placeholder="Kelas" 
-            />
-            <button 
-              onClick={handleAddStudent} disabled={adding}
-              className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              {adding ? 'Adding...' : 'Add'}
-            </button>
+            <div className="md:col-span-3 flex gap-2 w-full">
+              <input 
+                value={newKelas} onChange={e => setNewKelas(e.target.value)}
+                className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
+                placeholder="Kelas" 
+              />
+              <button 
+                onClick={handleAddStudent} disabled={adding}
+                className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0"
+              >
+                {adding ? 'Adding...' : 'Add'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
