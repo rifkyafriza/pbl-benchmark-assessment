@@ -18,11 +18,21 @@ Web app replacing the Google Form-based PBL benchmark assessment workflow at Pol
 - **Team Management (Soft/Hard Delete)** — Teams without any recorded grades are hard-deleted. Teams with grades are soft-deleted (`is_deleted=true`) to preserve historical data, keeping them out of the UI and exports. Soft-deleted teams are automatically restored if re-imported.
 - **Import** — two Excel templates (team+student+pimpro roster, and reviewer assignment with fuzzy username/full-name matching). All rows validated before any commit; any row failure aborts the whole import with a full error report.
 
+## Database Setup
+
+To install your own Supabase database for this project:
+
+1. Create a new project in [Supabase](https://supabase.com/).
+2. Go to the **SQL Editor** in your Supabase project dashboard.
+3. Open the `database.sql` file from this repository, copy its contents, and paste it into the SQL Editor.
+4. Run the SQL script to create all tables and the default Admin account.
+5. Retrieve your project's connection strings (`URL`, `anon key`, `service_role key`) from Project Settings > API.
+
 ## Getting started
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in real Supabase project values
+cp .env.example .env.local   # fill in real Supabase project values from the step above
 npm run dev
 ```
 
