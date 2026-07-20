@@ -13,7 +13,7 @@ jest.mock('@/lib/auth', () => ({
 }));
 
 // Mock bcryptjs
-jest.mock('bcryptjs', () => ({
+jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashedpassword123'),
 }));
 

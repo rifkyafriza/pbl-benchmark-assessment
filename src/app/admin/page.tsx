@@ -6,20 +6,29 @@ import {
   listSemesters, addSemester, deleteSemester, setActiveSemester, setActivePeriod,
   listLecturerAccounts, createLecturerAccount,
   updateLecturerAccount, getLecturerGradeCount, deleteLecturerAccount,
-  getProgress, getTeamCount, unlockTeamReviewer, listAllLecturers, setTeamAssignment, setTeamReviewer,
-  importTeamsTemplate, importReviewersTemplate, exportGradesData,
+  getProgress, getTeamCount, toggleTeamReviewerLock, listAllLecturers, setTeamAssignment, setTeamReviewer,
+  importTeamsTemplate, importSiapPblTemplate, importReviewersTemplate, exportGradesData,
   deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam,
 } from '@/lib/adminActions';
-import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil } from 'lucide-react';
+import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
 
+function ensureAbsoluteUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed === '' || trimmed === '-' || trimmed.toLowerCase() === 'n/a') return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  return `https://${trimmed}`;
+}
+
 type Semester = { id: string; name: string; is_active: boolean; active_period: 'ATS' | 'AAS' };
-type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string };
+type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] };
 type TeamProgress = {
   team_id: string; team_name: string; team_code: string; academic_year_id: string;
   pimpro_id: string | null; pimpro_name: string | null; team_kelas: string | null;
-  total_students: number; reviewers: ReviewerProgress[];
+  total_students: number; reviewers: ReviewerProgress[]; completed_links: number;
+  links?: { rpp: string | null; laporan_akhir: string | null; poster: string | null; manual_book: string | null; bast: string | null; video_demo: string | null; };
 };
 type LecturerAccount = { id: string; name: string; username: string | null; initials: string | null };
 type LecturerOption = { id: string; name: string };
@@ -37,14 +46,19 @@ export default function AdminDashboard() {
   const [newLecturerPassword, setNewLecturerPassword] = useState('');
   const [editingLecturer, setEditingLecturer] = useState<LecturerAccount | null>(null);
   const [editingTeam, setEditingTeam] = useState<TeamProgress | null>(null);
+  const [selectedDocsTeam, setSelectedDocsTeam] = useState<TeamProgress | null>(null);
+  const [selectedReviewerProgress, setSelectedReviewerProgress] = useState<{ teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] } | null>(null);
   const [kelasFilter, setKelasFilter] = useState<string>('Semua');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [loading, setLoading] = useState(true);
   const [isImportingTeams, setIsImportingTeams] = useState(false);
+  const [isImportingSiapPbl, setIsImportingSiapPbl] = useState(false);
   const [isImportingReviewers, setIsImportingReviewers] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [totalTeams, setTotalTeams] = useState(0);
   const teamsFileRef = useRef<HTMLInputElement>(null);
+  const siapPblFileRef = useRef<HTMLInputElement>(null);
   const reviewersFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -112,7 +126,8 @@ export default function AdminDashboard() {
             // A new reviewer starts with 0 graded students. If they are swapped back, it will resync via the background fetch anyway.
             graded_students: 0,
             finalized_students: 0,
-            status: 'Not Started'
+            status: 'Not Started',
+            students: r.students.map(s => ({ ...s, is_graded: false, is_locked: false }))
           };
         }
         return r;
@@ -124,7 +139,8 @@ export default function AdminDashboard() {
           lecturer_name: newLecturer.name,
           graded_students: 0,
           finalized_students: 0,
-          status: 'Not Started'
+          status: 'Not Started',
+          students: p.reviewers[0]?.students?.map(s => ({ ...s, is_graded: false, is_locked: false })) || []
         });
       }
       return { ...p, reviewers: updatedReviewers };
@@ -205,26 +221,14 @@ export default function AdminDashboard() {
     } catch (e: any) { alert('Error deleting lecturer: ' + e.message); }
   };
 
-  const handleUnlock = async (teamId: string, lecturerId: string) => {
-    if (!confirm('Unlock this reviewer\'s scores for this team?')) return;
-    
-    // Optimistic update
-    setProgress(prev => prev.map(p => {
-      if (p.team_id !== teamId) return p;
-      return {
-        ...p,
-        reviewers: p.reviewers.map(r => r.lecturer_id === lecturerId ? { ...r, status: 'Unlocked' } : r)
-      };
-    }));
-
+  const handleToggleLock = async (teamId: string, lecturerId: string, currentStatus: string) => {
+    const isLocked = currentStatus === 'Completed';
+    const actionText = isLocked ? 'Unlock' : 'Lock';
+    if (!confirm(`${actionText} grades for this reviewer?`)) return;
     try {
-      await unlockTeamReviewer(teamId, lecturerId, activeSemesterId);
-      // Background sync
+      await toggleTeamReviewerLock(teamId, lecturerId, activeSemesterId, !isLocked);
       getProgress(activeSemesterId).then(setProgress);
-    } catch (e: any) { 
-      alert('Error: ' + e.message); 
-      getProgress(activeSemesterId).then(setProgress);
-    }
+    } catch (e: any) { alert(e.message); }
   };
 
   const handleDeleteTeam = async (team: TeamProgress) => {
@@ -248,11 +252,37 @@ export default function AdminDashboard() {
   };
 
   const downloadTeamsTemplate = () => {
-    const rows = [{ 'TAHUN AJARAN': 'Genap 2025/2026', 'KODE': 'PBL-RE-001', 'JUDUL PROJECT': 'KRAI', 'PIMPRO': 'Rifqi Amalya Fatekha', 'PRODI': 'D4 Rekayasa Keamanan Siber', 'SEMESTER': 6, 'NIM': '4222301008', 'NAMA': 'Josua Hottua Harianja', 'KELAS': 'IF-1 A Pagi' }];
+    const rows = [{ 'TAHUN AJARAN': 'Genap 2025/2026', 'KODE': 'PBL-RE-001', 'JUDUL PROJECT': 'KRAI', 'PIMPRO': 'Rifqi Amalya Fatekha', 'NIM': '4222301008', 'NAMA': 'Josua Hottua Harianja', 'PRODI': 'TRK', 'SEMESTER': '2', 'KELAS': 'Pagi' }];
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'teams');
     XLSX.writeFile(wb, 'import_template_teams.xlsx');
+  };
+
+  const downloadSiapPblTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Export'],
+      ['ID', 'Judul Usulan PBL', 'Jenis Proyek', 'Tipe Proyek', 'Manpro', 'Nama Tim', 'MHS', 'Matakuliah', 'RPP', 'Laporan Akhir', 'Poster', 'Manual Book', 'BAST', 'Video Demo'],
+      [
+        1,
+        'DELIVERY LINE FOLLOWER',
+        'Robot',
+        'Kebutuhan Internal Unit',
+        'Emelia Rosari Siregar',
+        'PBL-RE-070',
+        'Sarinda (4222501061), Muhammad Faiz Nabil Hariyanto (4222501069)',
+        '',
+        'https://link-to-rpp.com',
+        'https://link-to-laporan.com',
+        '',
+        '',
+        '',
+        ''
+      ]
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'teams');
+    XLSX.writeFile(wb, 'import_template_siap_pbl.xlsx');
   };
 
   const downloadReviewersTemplate = () => {
@@ -289,7 +319,8 @@ export default function AdminDashboard() {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(sheet);
-        const result = await importTeamsTemplate(json as any, activeSemesterId);
+        const plainJson = JSON.parse(JSON.stringify(json));
+        const result = await importTeamsTemplate(plainJson as any, activeSemesterId);
         if (result.success) {
           alert(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
           setTotalTeams(await getTeamCount(activeSemesterId));
@@ -302,6 +333,37 @@ export default function AdminDashboard() {
       } finally {
         setIsImportingTeams(false);
         if (teamsFileRef.current) teamsFileRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleSiapPblFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeSemesterId) return;
+    setIsImportingSiapPbl(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        // Start parsing from row index 1 (skipping the "Export" row at index 0)
+        const json = XLSX.utils.sheet_to_json(sheet, { range: 1 });
+        const plainJson = JSON.parse(JSON.stringify(json));
+        const result = await importSiapPblTemplate(plainJson as any, activeSemesterId);
+        if (result.success) {
+          alert(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
+          setTotalTeams(await getTeamCount(activeSemesterId));
+          setProgress(await getProgress(activeSemesterId));
+        } else {
+          alert('Import failed:\n' + result.error);
+        }
+      } catch (err: any) {
+        alert('Import failed:\n' + err.message);
+      } finally {
+        setIsImportingSiapPbl(false);
+        if (siapPblFileRef.current) siapPblFileRef.current.value = '';
       }
     };
     reader.readAsArrayBuffer(file);
@@ -320,7 +382,8 @@ export default function AdminDashboard() {
         const sheetName = workbook.SheetNames.includes('reviewers') ? 'reviewers' : workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(sheet);
-        const result = await importReviewersTemplate(json as any, activeSemesterId);
+        const plainJson = JSON.parse(JSON.stringify(json));
+        const result = await importReviewersTemplate(plainJson as any, activeSemesterId);
         if (result.success) {
           alert(`Import complete: ${result.assignmentsApplied} reviewer assignments applied (${result.rowsProcessed} rows read).`);
           setProgress(await getProgress(activeSemesterId));
@@ -476,7 +539,17 @@ export default function AdminDashboard() {
               </label>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">2. Reviewer Assignments</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">2. SIAP PBL Data (Teams + Students + Links)</p>
+              <div className="flex gap-3 mb-2">
+                <button onClick={downloadSiapPblTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
+              </div>
+              <label className={`cursor-pointer ${isImportingSiapPbl ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
+                {isImportingSiapPbl ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload SIAP PBL File'}
+                <input ref={siapPblFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleSiapPblFileUpload} disabled={isImportingSiapPbl || !activeSemesterId} />
+              </label>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">3. Reviewer Assignments</p>
               <div className="flex gap-3 mb-2">
                 <button onClick={downloadReviewersTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
               </div>
@@ -528,16 +601,21 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative border-t border-gray-100 dark:border-gray-700">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900/50">
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400">Team</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400">Pimpro</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400">Reviewer</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400">Students Graded</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400">Status</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400">Action</th>
+            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 shadow-sm">
+              <tr>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                  <button onClick={() => setSortDirection(s => s === 'asc' ? 'desc' : 'asc')} className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                    Team <ArrowUpDown size={14} className="opacity-50" />
+                  </button>
+                </th>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Pimpro (Manpro)</th>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Doc Progress</th>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Reviewers</th>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Students Graded</th>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Status</th>
+                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -553,14 +631,18 @@ export default function AdminDashboard() {
                     if (kelasFilter === 'Malam') return p.team_kelas?.toLowerCase().includes('malam');
                     return true;
                   })
+                  .sort((a, b) => {
+                    const cmp = (a.team_name || '').localeCompare(b.team_name || '');
+                    return sortDirection === 'asc' ? cmp : -cmp;
+                  })
                   .map((p) => {
                   // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
                   const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
                   return (
-                    <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750">
+                    <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="p-4">
-                        <div className="font-medium">{p.team_name}</div>
-                        <div className="text-xs text-gray-500">{p.team_code}</div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{p.team_name}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{p.team_code}</div>
                       </td>
                       <td className="p-4">
                         <select
@@ -571,6 +653,11 @@ export default function AdminDashboard() {
                           <option value="">— none —</option>
                           {lecturerOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                         </select>
+                      </td>
+                      <td className="p-4 whitespace-nowrap text-sm text-slate-700">
+                          <button type="button" onClick={() => setSelectedDocsTeam(p)} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${p.completed_links === 6 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : p.completed_links > 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                            {p.completed_links}/6
+                          </button>
                       </td>
                       <td className="p-4 space-y-1">
                         {slots.map((slot, i) => {
@@ -593,13 +680,13 @@ export default function AdminDashboard() {
                           <span className="text-sm text-gray-500">—</span>
                         ) : (
                           <div className="space-y-1">
-                            {p.reviewers.map((r) => (
-                              <div key={r.lecturer_id} className="flex items-center gap-2">
-                                <span className="text-sm font-medium">{r.finalized_students} / {p.total_students}</span>
-                                <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                  <div className="h-full bg-sky" style={{ width: `${p.total_students > 0 ? (r.finalized_students / p.total_students) * 100 : 0}%` }} />
+                            {p.reviewers.map((r, idx) => (
+                              <button key={r.lecturer_id} type="button" onClick={() => setSelectedReviewerProgress({ teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })} className="flex items-center gap-2 hover:opacity-80 transition-opacity w-full text-left p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                <span className="text-sm font-medium w-12">{r.graded_students} / {p.total_students}</span>
+                                <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                                  <div className="h-full bg-sky" style={{ width: `${p.total_students > 0 ? (r.graded_students / p.total_students) * 100 : 0}%` }} />
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -622,8 +709,8 @@ export default function AdminDashboard() {
                       <td className="p-4 space-y-2">
                         <div className="space-y-1">
                           {p.reviewers.map((r) => (
-                            <button key={r.lecturer_id} onClick={() => handleUnlock(p.team_id, r.lecturer_id)} className="text-xs text-orange-600 hover:underline flex items-center gap-1">
-                              <Unlock size={14} /> Unlock {r.lecturer_name}
+                            <button key={r.lecturer_id} onClick={() => handleToggleLock(p.team_id, r.lecturer_id, r.status)} className={`text-xs hover:underline flex items-center gap-1 ${r.status === 'Completed' ? 'text-orange-600' : 'text-gray-500'}`}>
+                              <Unlock size={14} /> {r.status === 'Completed' ? 'Unlock' : 'Lock'} {r.lecturer_name}
                             </button>
                           ))}
                         </div>
@@ -640,6 +727,14 @@ export default function AdminDashboard() {
           </table>
         </div>
       </section>
+
+      {selectedDocsTeam && (
+        <DocLinksModal team={selectedDocsTeam} onClose={() => setSelectedDocsTeam(null)} />
+      )}
+
+      {selectedReviewerProgress && (
+        <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
+      )}
     </div>
   );
 }
@@ -836,6 +931,110 @@ function TeamEditModal({
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal for Docs Progress
+function DocLinksModal({ team, onClose }: { team: TeamProgress; onClose: () => void }) {
+  const TEAM_LINKS = [
+    { key: 'rpp', label: 'RPP' },
+    { key: 'laporan_akhir', label: 'Laporan Akhir' },
+    { key: 'poster', label: 'Poster' },
+    { key: 'manual_book', label: 'Manual Book' },
+    { key: 'bast', label: 'BAST' },
+    { key: 'video_demo', label: 'Video Demo' },
+  ] as const;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="p-5 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Document Links</h2>
+          <p className="text-sm text-gray-500 mt-1">{team.team_name}</p>
+        </div>
+        <div className="p-5">
+          <div className="flex flex-col gap-3">
+            {TEAM_LINKS.map(link => {
+              const url = ensureAbsoluteUrl(team.links?.[link.key]);
+              if (!url) {
+                return (
+                  <div key={link.key} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 opacity-60">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">{link.label}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">Not provided</span>
+                  </div>
+                );
+              }
+              return (
+                <a key={link.key} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-xl bg-sky/5 hover:bg-sky/10 border border-sky/10 transition-colors group">
+                  <span className="font-medium text-sky dark:text-sky/90 group-hover:text-sky">{link.label}</span>
+                  <ExternalLink size={16} className="text-sky/70 group-hover:text-sky" />
+                </a>
+              );
+            })}
+          </div>
+        </div>
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+          <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewerProgressModal({ data, onClose }: { data: { teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] }; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Reviewer {data.reviewerIndex} Progress</h2>
+          <p className="text-sm text-gray-500 mt-1">{data.teamName} — {data.reviewerName}</p>
+        </div>
+        <div className="p-5 overflow-y-auto flex-1 min-h-0">
+          <div className="flex flex-col gap-3">
+            {data.students.length === 0 ? (
+              <p className="text-sm text-gray-500 italic">No students in this team.</p>
+            ) : (
+              data.students.map(student => (
+                <div key={student.id} className={`flex flex-col p-3 rounded-xl border ${student.is_locked ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800/30' : student.is_graded ? 'bg-amber-50 border-amber-100 dark:bg-amber-900/10 dark:border-amber-800/30' : 'bg-gray-50 border-gray-100 dark:bg-gray-800/50 dark:border-gray-700'}`}>
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate" title={student.name}>{student.name}</div>
+                      <div className="text-xs text-gray-500">{student.nim}</div>
+                      {student.is_graded && (
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] sm:text-xs">
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
+                            <span className="block text-gray-400">Impl.</span>
+                            <span className="font-medium text-gray-700 dark:text-gray-300">{student.implementation_score ?? '-'}</span>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
+                            <span className="block text-gray-400">Doc.</span>
+                            <span className="font-medium text-gray-700 dark:text-gray-300">{student.document_score ?? '-'}</span>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
+                            <span className="block text-gray-400">Eng.</span>
+                            <span className="font-medium text-gray-700 dark:text-gray-300">{student.english_score ?? '-'}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${student.is_locked ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : student.is_graded ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                      {student.is_locked ? 'Finalized' : student.is_graded ? 'Draft Saved' : 'Ungraded'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end flex-shrink-0">
+          <button onClick={onClose} className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
+            Close
+          </button>
         </div>
       </div>
     </div>

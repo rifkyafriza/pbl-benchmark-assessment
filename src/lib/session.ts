@@ -7,10 +7,9 @@ const encoder = new TextEncoder();
 
 export type SessionPayload = { id: string; role: 'admin' | 'lecturer'; name: string };
 
-function b64urlEncode(bytes: ArrayBuffer): string {
-  const arr = new Uint8Array(bytes);
+function b64urlEncode(bytes: Uint8Array): string {
   let str = '';
-  arr.forEach((b) => (str += String.fromCharCode(b)));
+  bytes.forEach((b) => (str += String.fromCharCode(b)));
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
@@ -30,10 +29,10 @@ async function getKey() {
 }
 
 export async function signSession(payload: SessionPayload): Promise<string> {
-  const body = b64urlEncode(encoder.encode(JSON.stringify(payload)).buffer as ArrayBuffer);
+  const body = b64urlEncode(encoder.encode(JSON.stringify(payload)));
   const key = await getKey();
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
-  return `${body}.${b64urlEncode(sig)}`;
+  return `${body}.${b64urlEncode(new Uint8Array(sig))}`;
 }
 
 // Verify a session token. Safe to call from middleware (edge runtime).

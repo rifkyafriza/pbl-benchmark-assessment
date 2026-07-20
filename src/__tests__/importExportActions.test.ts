@@ -60,7 +60,7 @@ describe('Import/Export Actions', () => {
         { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'PIMPRO': 'Lec1', 'NIM': '123', 'NAMA': 'John' },
       ];
       
-      const mockIn = (supabaseAdmin.from('users').select().eq().in as jest.Mock);
+      const mockIn = ((supabaseAdmin.from('users').select() as any).eq('role', 'lecturer').in as jest.Mock);
       mockIn.mockResolvedValueOnce({ data: [{ id: 'lec-1', name: 'Lec1' }], error: null }); // lecturers
       mockIn.mockResolvedValueOnce({ data: [], error: null }); // teams
       mockIn.mockResolvedValueOnce({ data: [], error: null }); // team_lecturers
@@ -82,7 +82,7 @@ describe('Import/Export Actions', () => {
       ];
       
       // Setup mock to return no team
-      const mockMaybeSingle = (supabaseAdmin.from('teams').select().eq().eq().maybeSingle as jest.Mock);
+      const mockMaybeSingle = ((supabaseAdmin.from('teams').select() as any).eq('a', 'b').eq('c', 'd').maybeSingle as jest.Mock);
       mockMaybeSingle.mockResolvedValueOnce({ data: null });
 
       const result = await importReviewersTemplate(rows, 'academic-year-1');

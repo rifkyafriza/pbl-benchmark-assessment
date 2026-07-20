@@ -45,3 +45,8 @@ next-env.d.ts
 
 # agents
 /.agents
+
+# extras
+.commitshow/
+.swc/
+scratch/

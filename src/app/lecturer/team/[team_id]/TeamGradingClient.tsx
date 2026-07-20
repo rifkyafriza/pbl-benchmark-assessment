@@ -2,30 +2,80 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Save, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { saveGrades } from '@/lib/lecturerActions';
 
 type Student = { id: string; name: string; nim: string; kelas?: string | null };
 type GradeEntry = { implementation_score: number; document_score: number; english_score: number; comment: string };
 
+function ensureAbsoluteUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed === '' || trimmed === '-' || trimmed.toLowerCase() === 'n/a') return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  return `https://${trimmed}`;
+}
+
 type ScoreKey = 'implementation_score' | 'document_score' | 'english_score';
-const SCORE_LABELS: { key: ScoreKey; label: string }[] = [
-  { key: 'implementation_score', label: 'Implementation' },
-  { key: 'document_score', label: 'Written Document' },
-  { key: 'english_score', label: 'Communication (English)' },
+
+const SCORE_CRITERIA: { key: ScoreKey; label: string; description: string; rubricLevels: string[] }[] = [
+  { 
+    key: 'implementation_score', 
+    label: 'b7. Implementation', 
+    description: 'Solves the problem statement comprehensively.',
+    rubricLevels: [
+      'Cannot design the implementation process. Unable to perform manufacturing properly. Unable to perform integration properly. Unable to perform test, verification, and validation. Unable to perform implementation management.',
+      'Recognize the implementation system design. Not completely perform manufacturing. Not completely perform integration. Not completely perform test, verification, and validation. Not completely perform implementation management.',
+      'Understand the implementation system design. Generally perform manufacturing. Generally perform integration. Generally perform test, verification, and validation. Generally perform implementation management.',
+      'Can executed the implementation system design. Completely perform manufacturing. Completely perform integration. Completely perform test, verification, and validation. Completely perform implementation management.',
+      'Properly and completely executed implementation system design. Properly and completely perform manufacturing. Properly and completely perform integration. Properly and completely perform test, verification, and validation. Properly and completely perform implementation management.'
+    ]
+  },
+  { 
+    key: 'document_score', 
+    label: 'c1. Written Document', 
+    description: 'Well-structured, clear, follows formatting guidelines.',
+    rubricLevels: [
+      'The written work is confusing and ambiguous owing to substantial errors in grammar and syntax. Written work has serious and persistent errors in word selection and terminology.',
+      'The written work contains some grammatical and syntax errors. Written work has several major errors in word selection and terminology.',
+      'The written work may exhibit a few minor errors in grammar or style. Written work has little major of errors in word selection and terminology.',
+      'The written work contains sentences that are almost always complete and grammatically correct. Written work is relatively free of errors in word selection and terminology.',
+      'The written work contains sentences that are always complete and grammatically correct. Written work has no major errors in word selection and terminology.'
+    ]
+  },
+  { 
+    key: 'english_score', 
+    label: 'c7. Communication in English', 
+    description: 'Ability to communicate effectively.',
+    rubricLevels: [
+      'Difficult to understand and had a hard time communicating their ideas. Difficult to understand, quiet in speaking, unclear in pronunciation. Speech is very slow, stumbling, nervous, and uncertain.',
+      'Adequately understand but still have difficulty to communicate their ideas. Slightly unclear with pronunciation at times. Speech is slow and often hesitant and irregular. Sentences may be left uncompleted.',
+      'Able to express their ideas adequately but often displayed inconsistencies. Pronunciation was good but sometimes interfere with communication. Speech is mostly smooth but with some hesitation.',
+      'Able to express their ideas fairly well but makes mistakes with their tenses, however is able to correct themselves. Pronunciation was very good. Speech is smooth without hesitation.',
+      'Able to express their ideas with ease in proper sentence structure and tenses. Pronunciation was very clear and easy to understand. Speech is effortless and smooth.'
+    ]
+  },
 ];
 
-// Big-tap-target 0–5 segmented stepper — mobile-first per PRD, no bare number input.
+const TEAM_LINKS = [
+  { key: 'rpp', label: 'RPP' },
+  { key: 'laporan_akhir', label: 'Laporan Akhir' },
+  { key: 'poster', label: 'Poster' },
+  { key: 'manual_book', label: 'Manual Book' },
+  { key: 'bast', label: 'BAST' },
+  { key: 'video_demo', label: 'Video Demo' },
+];
+
 function ScoreStepper({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled: boolean }) {
   return (
-    <div className="grid grid-cols-6 gap-1">
+    <div className="flex gap-1.5 shrink-0">
       {[0, 1, 2, 3, 4, 5].map((n) => (
         <button
           key={n}
           type="button"
           disabled={disabled}
           onClick={() => onChange(n)}
-          className={`h-11 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 ${
+          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center ${
             value === n ? 'bg-sky text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
           }`}
         >
@@ -51,6 +101,10 @@ export default function TeamGradingClient({
 }) {
   const router = useRouter();
   const [grades, setGrades] = useState<Record<string, GradeEntry>>(initialGrades);
+  
+  const initialTeamComment = Object.values(initialGrades)[0]?.comment || '';
+  const [teamComment, setTeamComment] = useState(initialTeamComment);
+  
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(isLocked);
   const [error, setError] = useState('');
@@ -64,14 +118,26 @@ export default function TeamGradingClient({
   });
 
   const update = <K extends keyof GradeEntry>(studentId: string, field: K, value: GradeEntry[K]) => {
-    setGrades((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [field]: value } }));
+    setGrades((prev) => ({ 
+      ...prev, 
+      [studentId]: { 
+        ...(prev[studentId] || { implementation_score: 0, document_score: 0, english_score: 0, comment: teamComment }), 
+        [field]: value 
+      } 
+    }));
   };
 
   const handleSave = async (finalize: boolean) => {
     setSaving(true);
     setError('');
     try {
-      const entries = students.map((s) => ({ studentId: s.id, ...grades[s.id] }));
+      const entries = students.map((s) => ({
+        studentId: s.id,
+        implementation_score: grades[s.id]?.implementation_score || 0,
+        document_score: grades[s.id]?.document_score || 0,
+        english_score: grades[s.id]?.english_score || 0,
+        comment: teamComment,
+      }));
       await saveGrades(team.id, entries, finalize);
       if (finalize) {
         setLocked(true);
@@ -86,37 +152,50 @@ export default function TeamGradingClient({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24">
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link prefetch={true} href="/lecturer/dashboard" className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
-              <ArrowLeft size={20} />
-            </Link>
-            <div>
-              <h1 className="font-bold text-navy dark:text-white text-lg">{team?.name}</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{team?.team_code}{period ? ` · ${period}` : ''}</p>
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link prefetch={true} href="/lecturer/dashboard" className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+                <ArrowLeft size={20} />
+              </Link>
+              <div>
+                <h1 className="font-bold text-navy dark:text-white text-lg leading-tight">{team?.name}</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{team?.team_code}{period ? ` · ${period}` : ''}</p>
+              </div>
             </div>
+            {locked && <span className="bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full font-medium shadow-sm">Locked</span>}
           </div>
-          {locked && <span className="bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full font-medium">Locked</span>}
+          
+          <div className="flex flex-wrap gap-2 ml-10">
+            {TEAM_LINKS.map(link => {
+              const url = ensureAbsoluteUrl(team[link.key]);
+              return url ? (
+                <a key={link.key} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors border border-blue-100 dark:border-blue-900/50">
+                  {link.label} <ExternalLink size={12} />
+                </a>
+              ) : null;
+            })}
+          </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto p-4 space-y-6 mt-4">
+      <main className="max-w-4xl mx-auto p-4 space-y-6 mt-4">
         {locked && (
-          <div className="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400 text-sm p-4 rounded-xl">
+          <div className="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-300 text-sm p-4 rounded-xl font-medium shadow-sm">
             Your scores for this team are locked. Ask the admin to unlock if you need to make corrections.
           </div>
         )}
         {error && <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm p-4 rounded-xl">{error}</div>}
 
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Students ({filteredStudents.length})</h2>
-          <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Filter Students ({filteredStudents.length})</h2>
+          <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
             {['Semua', 'Pagi', 'Malam'].map((k) => (
               <button
                 key={k}
                 onClick={() => setKelasFilter(k)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
                   kelasFilter === k ? 'bg-white dark:bg-gray-700 text-sky shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
@@ -126,54 +205,85 @@ export default function TeamGradingClient({
           </div>
         </div>
 
-        {filteredStudents.map((student) => {
-          const g = grades[student.id];
-          return (
-            <div key={student.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
-              <div>
-                <h3 className="font-bold text-gray-900 dark:text-white">{student.name}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{student.nim}</p>
-              </div>
-
-              {SCORE_LABELS.map(({ key, label }) => (
-                <div key={key}>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</label>
-                    <span className="font-bold text-sky">{g[key]} / 5</span>
-                  </div>
-                  <ScoreStepper value={g[key]} onChange={(v) => update(student.id, key, v)} disabled={locked} />
+        {SCORE_CRITERIA.map(criterion => (
+          <div key={criterion.key} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+            <div className="mb-2">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">{criterion.label}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{criterion.description}</p>
+              
+              {criterion.rubricLevels && (
+                <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <table className="w-full text-left border-collapse text-xs min-w-[600px]">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-900/80">
+                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">1 - Poor</th>
+                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">2 - Fair</th>
+                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">3 - Good</th>
+                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">4 - Very Good</th>
+                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">5 - Excellent</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {criterion.rubricLevels.map((level, i) => (
+                          <td key={i} className="p-2.5 border-r border-gray-200 dark:border-gray-700 last:border-r-0 text-gray-600 dark:text-gray-400 align-top leading-relaxed">
+                            {level}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-
-              <div>
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 block">Comment (Optional)</label>
-                <textarea
-                  value={g.comment}
-                  onChange={(e) => update(student.id, 'comment', e.target.value)}
-                  disabled={locked}
-                  placeholder="Enter qualitative feedback..."
-                  className="w-full border border-gray-200 dark:border-gray-600 rounded-lg p-3 text-sm bg-gray-50 dark:bg-gray-700 focus:border-sky outline-none min-h-[80px] resize-none disabled:opacity-50 text-gray-800 dark:text-gray-200"
-                />
-              </div>
+              )}
             </div>
-          );
-        })}
+            
+            <div className="space-y-4 pt-2 divide-y divide-gray-50 dark:divide-gray-700/50">
+              {filteredStudents.map(student => {
+                 const currentScore = grades[student.id]?.[criterion.key] || 0;
+                 return (
+                   <div key={student.id} className="pt-4 first:pt-2 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                     <div>
+                        <h3 className="font-bold text-gray-900 dark:text-gray-100">{student.name}</h3>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">{student.nim} {student.kelas ? `· ${student.kelas}` : ''}</p>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <ScoreStepper value={currentScore} onChange={(v) => update(student.id, criterion.key, v)} disabled={locked} />
+                        <span className="w-14 text-center font-black text-sky text-sm bg-sky/10 px-2 py-1.5 rounded-lg shrink-0">{currentScore} / 5</span>
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
+          </div>
+        ))}
+
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Team Feedback Comment</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">This comment will be applied to all students in this team.</p>
+          <textarea
+            value={teamComment}
+            onChange={(e) => setTeamComment(e.target.value)}
+            disabled={locked}
+            placeholder="Enter qualitative feedback for the entire team..."
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-4 text-sm bg-gray-50 dark:bg-gray-700 focus:border-sky outline-none min-h-[120px] resize-y disabled:opacity-50 text-gray-800 dark:text-gray-200"
+          />
+        </div>
       </main>
 
       {!locked && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 p-4">
-          <div className="max-w-3xl mx-auto flex gap-3">
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+          <div className="max-w-4xl mx-auto flex gap-3">
             <button
               onClick={() => handleSave(false)}
               disabled={saving}
-              className="flex-1 py-3 font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              className="flex-1 py-3.5 font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
             >
               {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Save Draft
             </button>
             <button
               onClick={() => handleSave(true)}
               disabled={saving}
-              className="flex-1 py-3 font-medium text-white bg-navy hover:bg-navy-light rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+              className="flex-1 py-3.5 font-bold text-white bg-navy hover:bg-navy-light rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
             >
               <CheckCircle2 size={18} /> Finalize & Lock
             </button>

@@ -1,6 +1,6 @@
 'use server';
 // Auth server actions — username+password only, no email anywhere.
-import * as bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcrypt';
 import { redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { setSessionCookie, clearSessionCookie, getSession } from '@/lib/session';
@@ -16,7 +16,7 @@ export async function loginAdmin(formData: FormData): Promise<{ error: string } 
     .from('users')
     .select('id, name, username, password_hash')
     .eq('role', 'admin')
-    .eq('username', username)
+    .ilike('username', username)
     .maybeSingle();
 
   if (!user || !user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
@@ -36,7 +36,7 @@ export async function loginLecturer(formData: FormData): Promise<{ error: string
     .from('users')
     .select('id, name, username, password_hash')
     .eq('role', 'lecturer')
-    .eq('username', username)
+    .ilike('username', username)
     .maybeSingle();
 
   if (!user || !user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {

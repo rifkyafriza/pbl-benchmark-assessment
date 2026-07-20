@@ -70,7 +70,7 @@ export async function getTeamCount(academicYearId: string) {
   return count || 0;
 }
 
-export async function unlockTeamReviewer(teamId: string, lecturerId: string, academicYearId: string) {
+export async function toggleTeamReviewerLock(teamId: string, lecturerId: string, academicYearId: string, lock: boolean) {
   await requireRole('admin');
   const validTeamId = idSchema.parse(teamId);
   const validLecturerId = idSchema.parse(lecturerId);
@@ -80,7 +80,7 @@ export async function unlockTeamReviewer(teamId: string, lecturerId: string, aca
   const period = semester?.active_period || 'ATS';
   const { error } = await supabaseAdmin
     .from('grades')
-    .update({ is_locked: false })
+    .update({ is_locked: lock })
     .eq('team_id', validTeamId)
     .eq('lecturer_id', validLecturerId)
     .eq('period', period);
@@ -91,22 +91,11 @@ export async function unlockTeamReviewer(teamId: string, lecturerId: string, aca
 export async function deleteTeam(teamId: string) {
   await requireRole('admin');
   
-  const { count, error: countError } = await supabaseAdmin
-    .from('grades')
-    .select('*', { count: 'exact', head: true })
-    .eq('team_id', teamId);
-    
-  if (countError) throw new Error(countError.message);
-
-  if (count && count > 0) {
-    const { error } = await supabaseAdmin.from('teams').update({ is_deleted: true }).eq('id', teamId);
-    if (error) throw new Error(error.message);
-  } else {
-    await supabaseAdmin.from('team_students').delete().eq('team_id', teamId);
-    await supabaseAdmin.from('team_lecturers').delete().eq('team_id', teamId);
-    const { error } = await supabaseAdmin.from('teams').delete().eq('id', teamId);
-    if (error) throw new Error(error.message);
-  }
+  await supabaseAdmin.from('grades').delete().eq('team_id', teamId);
+  await supabaseAdmin.from('team_students').delete().eq('team_id', teamId);
+  await supabaseAdmin.from('team_lecturers').delete().eq('team_id', teamId);
+  const { error } = await supabaseAdmin.from('teams').delete().eq('id', teamId);
+  if (error) throw new Error(error.message);
   
   revalidatePath('/admin');
 }
