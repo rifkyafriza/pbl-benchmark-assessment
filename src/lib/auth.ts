@@ -62,7 +62,7 @@ export async function requireRole(role: 'admin' | 'lecturer') {
 }
 
 export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, 12);
 }
 
 // Self-service password change — used by both admin and lecturer accounts.
@@ -76,7 +76,7 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
     throw new Error('Current password is incorrect.');
   }
 
-  const password_hash = await bcrypt.hash(newPassword, 10);
+  const password_hash = await bcrypt.hash(newPassword, 12);
   const { error } = await supabaseAdmin.from('users').update({ password_hash }).eq('id', session.id);
   if (error) throw new Error(error.message);
 }
