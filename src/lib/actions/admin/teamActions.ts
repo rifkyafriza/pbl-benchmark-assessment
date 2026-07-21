@@ -161,6 +161,7 @@ export async function addTeamManual(
   teamCode: string,
   teamName: string,
   pimproId: string | null,
+  kelas: string | null,
   students: { nim: string, name: string }[]
 ) {
   await requireRole('admin');
@@ -174,6 +175,7 @@ export async function addTeamManual(
       academic_year_id: validAcademicYearId,
       team_code: teamCode.trim(),
       name: teamName.trim(),
+      kelas: kelas,
       is_deleted: false,
     })
     .select('id')
@@ -234,4 +236,12 @@ export async function addTeamManual(
 
   revalidatePath('/admin');
   return newTeamId;
+}
+
+export async function updateTeamClass(teamId: string, kelas: string | null) {
+  await requireRole('admin');
+  const validId = idSchema.parse(teamId);
+  const { error } = await supabaseAdmin.from('teams').update({ kelas }).eq('id', validId);
+  if (error) throw new Error(error.message);
+  revalidatePath('/admin');
 }

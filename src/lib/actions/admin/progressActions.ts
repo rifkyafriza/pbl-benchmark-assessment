@@ -12,7 +12,7 @@ export async function getProgress(academicYearId: string) {
   ] = await Promise.all([
     supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single(),
     supabaseAdmin.from('teams').select(`
-      id, name, team_code,
+      id, name, team_code, kelas,
       rpp, laporan_akhir, poster, manual_book, bast, video_demo,
       team_lecturers (team_id, lecturer_id, role, users(name)),
       team_students (team_id, student_id, students(kelas, nim, name)),
@@ -36,10 +36,7 @@ export async function getProgress(academicYearId: string) {
     });
 
     const totalStudents = (t.team_students || []).length;
-    let team_kelas = null;
-    if (t.team_students && t.team_students.length > 0) {
-      team_kelas = t.team_students[0].students?.kelas || null;
-    }
+    const team_kelas = t.kelas || null;
 
     const activeGrades = (t.grades || []).filter((g: any) => g.period === period);
     

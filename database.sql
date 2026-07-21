@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.teams (
     name TEXT NOT NULL,
     team_code TEXT,
     academic_year_id UUID REFERENCES public.academic_years(id) ON DELETE SET NULL,
+    kelas TEXT,
     rpp TEXT,
     laporan_akhir TEXT,
     poster TEXT,

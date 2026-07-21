@@ -20,6 +20,7 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
   const [teamCode, setTeamCode] = useState('');
   const [teamName, setTeamName] = useState('');
   const [pimproId, setPimproId] = useState('');
+  const [teamKelas, setTeamKelas] = useState('');
   const [students, setStudents] = useState([{ nim: '', name: '' }]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -64,12 +65,14 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
         teamCode,
         teamName,
         pimproId || null,
+        teamKelas || null,
         validStudents
       );
       // Reset and close
       setTeamCode('');
       setTeamName('');
       setPimproId('');
+      setTeamKelas('');
       setStudents([{ nim: '', name: '' }]);
       onClose();
     } catch (err: any) {
@@ -112,6 +115,18 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
                 {lecturers.map(l => (
                   <option key={l.id} value={l.id}>{l.name} {l.initials ? `(${l.initials})` : ''}</option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Team Class</label>
+              <select
+                value={teamKelas}
+                onChange={(e) => setTeamKelas(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-lg p-2.5 outline-none focus:border-sky bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
+              >
+                <option value="">-- Select Class --</option>
+                <option value="Pagi">Pagi</option>
+                <option value="Malam">Malam</option>
               </select>
             </div>
             <div className="md:col-span-2">

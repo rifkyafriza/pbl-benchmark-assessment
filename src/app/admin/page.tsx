@@ -8,7 +8,7 @@ import {
   updateLecturerAccount, getLecturerGradeCount, deleteLecturerAccount,
   getProgress, getTeamCount, toggleTeamReviewerLock, listAllLecturers, setTeamAssignment, setTeamReviewer,
   importTeamsTemplate, importSiapPblTemplate, importReviewersTemplate, exportGradesData,
-  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam,
+  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass,
 } from '@/lib/adminActions';
 import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -800,6 +800,7 @@ function LecturerEditModal({
 function TeamEditModal({
   team, onClose, onSaved,
 }: { team: TeamProgress; onClose: () => void; onSaved: () => void }) {
+  const [teamKelas, setTeamKelas] = useState(team.team_kelas || '');
   const [students, setStudents] = useState<{ id: string; nim: string; name: string; prodi?: string; semester?: string; kelas?: string; }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -861,6 +862,26 @@ function TeamEditModal({
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 font-bold p-2">&times;</button>
         </div>
+
+        <div className="mb-4 flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Team Class:</label>
+          <select 
+            value={teamKelas}
+            onChange={async (e) => {
+              const val = e.target.value;
+              setTeamKelas(val);
+              try {
+                await updateTeamClass(team.team_id, val);
+                onSaved();
+              } catch (err: any) { alert(err.message); }
+            }}
+            className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700"
+          >
+            <option value="">-- Select Class --</option>
+            <option value="Pagi">Pagi</option>
+            <option value="Malam">Malam</option>
+          </select>
+        </div>
         
         {error && <p className="text-sm text-red-500 mb-4 flex-shrink-0">{error}</p>}
         
@@ -897,12 +918,15 @@ function TeamEditModal({
                   placeholder="Semester" 
                 />
                 <div className="md:col-span-3 flex gap-2 w-full">
-                  <input 
-                    defaultValue={s.kelas || ''} 
-                    onBlur={(e) => { if (e.target.value !== (s.kelas || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value) }}
-                    className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
-                    placeholder="Kelas" 
-                  />
+                  <select
+                    value={s.kelas || ''}
+                    onChange={(e) => handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value)}
+                    className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700"
+                  >
+                    <option value="">Kelas</option>
+                    <option value="Pagi">Pagi</option>
+                    <option value="Malam">Malam</option>
+                  </select>
                   <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1 flex-shrink-0" title="Remove student">
                     <Trash2 size={16} />
                   </button>
@@ -936,11 +960,14 @@ function TeamEditModal({
               placeholder="Semester" 
             />
             <div className="md:col-span-3 flex gap-2 w-full">
-              <input 
+              <select
                 value={newKelas} onChange={e => setNewKelas(e.target.value)}
-                className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
-                placeholder="Kelas" 
-              />
+                className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700"
+              >
+                <option value="">Kelas</option>
+                <option value="Pagi">Pagi</option>
+                <option value="Malam">Malam</option>
+              </select>
               <button 
                 onClick={handleAddStudent} disabled={adding}
                 className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0"

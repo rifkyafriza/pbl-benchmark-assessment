@@ -19,7 +19,7 @@ export async function getMyReviewTeams() {
   const { data: teams } = await supabaseAdmin
     .from('teams')
     .select(`
-      id, name, team_code,
+      id, name, team_code, kelas,
       team_lecturers!inner(lecturer_id, role),
       team_students (students(kelas))
     `)
@@ -30,15 +30,11 @@ export async function getMyReviewTeams() {
     .order('team_code');
 
   const teamsWithKelas = (teams || []).map((t: any) => {
-    let team_kelas = null;
-    if (t.team_students && t.team_students.length > 0) {
-      team_kelas = t.team_students[0].students?.kelas || null;
-    }
     return {
       id: t.id,
       name: t.name,
       team_code: t.team_code,
-      team_kelas
+      team_kelas: t.kelas || null
     };
   });
 
