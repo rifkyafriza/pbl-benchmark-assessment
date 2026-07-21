@@ -14,6 +14,8 @@ import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, 
 import * as XLSX from 'xlsx';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
 import AddTeamModal from './AddTeamModal';
+import { useToast } from '@/components/Toast';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 function ensureAbsoluteUrl(url: string | null | undefined): string {
   if (!url) return '';
@@ -35,6 +37,11 @@ type LecturerAccount = { id: string; name: string; username: string | null; init
 type LecturerOption = { id: string; name: string };
 
 export default function AdminDashboard() {
+  const toast = useToast();
+  const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; }>({
+    isOpen: false, title: '', message: '', onConfirm: () => {}
+  });
+
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [activeSemesterId, setActiveSemesterId] = useState<string>('');
   const [newSemesterName, setNewSemesterName] = useState('');
@@ -108,7 +115,7 @@ export default function AdminDashboard() {
       await setTeamAssignment(teamId, 'pimpro', lecturerId || null);
       getProgress(activeSemesterId).then(setProgress); // background sync
     } catch (e: any) { 
-      alert('Error updating assignment: ' + e.message); 
+      toast.error('Error updating assignment: ' + e.message); 
       getProgress(activeSemesterId).then(setProgress); // revert on error
     }
   };
@@ -152,7 +159,7 @@ export default function AdminDashboard() {
       await setTeamReviewer(teamId, previousLecturerId, newLecturerId || null);
       getProgress(activeSemesterId).then(setProgress); // background sync
     } catch (e: any) { 
-      alert('Error updating reviewer: ' + e.message); 
+      toast.error('Error updating reviewer: ' + e.message); 
       getProgress(activeSemesterId).then(setProgress); // revert on error
     }
   };
@@ -165,16 +172,24 @@ export default function AdminDashboard() {
       setSemesters(sems);
       setNewSemesterName('');
       if (!activeSemesterId && sems[0]) setActiveSemesterId(sems[0].id);
-    } catch (e: any) { alert('Error adding semester: ' + e.message); }
+      toast.success('Tahun ajaran added successfully');
+    } catch (e: any) { toast.error('Error adding semester: ' + e.message); }
   };
 
-  const handleDeleteSemester = async (id: string) => {
-    if (!confirm('Delete this tahun ajaran? This will not delete teams, but will orphan them.')) return;
-    try {
-      await deleteSemester(id);
-      setSemesters(semesters.filter((s) => s.id !== id));
-      if (activeSemesterId === id) setActiveSemesterId('');
-    } catch (e: any) { alert('Error deleting semester: ' + e.message); }
+  const handleDeleteSemester = (id: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Tahun Ajaran',
+      message: 'Delete this tahun ajaran? This will not delete teams, but will orphan them.',
+      onConfirm: async () => {
+        try {
+          await deleteSemester(id);
+          setSemesters(semesters.filter((s) => s.id !== id));
+          if (activeSemesterId === id) setActiveSemesterId('');
+          toast.success('Tahun ajaran deleted');
+        } catch (e: any) { toast.error('Error deleting semester: ' + e.message); }
+      }
+    });
   };
 
   const handleSetActiveSemester = async (id: string) => {
@@ -184,8 +199,9 @@ export default function AdminDashboard() {
     setActiveSemesterId(id);
     try {
       await setActiveSemester(id);
+      toast.success('Active tahun ajaran updated');
     } catch (e: any) {
-      alert('Error setting active semester: ' + e.message);
+      toast.error('Error setting active semester: ' + e.message);
       setSemesters(previousSemesters);
       setActiveSemesterId(previousActive);
     }
@@ -197,8 +213,9 @@ export default function AdminDashboard() {
     try {
       await setActivePeriod(semesterId, period);
       getProgress(semesterId).then(setProgress);
+      toast.success('Active period updated');
     } catch (e: any) { 
-      alert('Error setting active period: ' + e.message); 
+      toast.error('Error setting active period: ' + e.message); 
       setSemesters(previousSemesters);
     }
   };
@@ -208,7 +225,8 @@ export default function AdminDashboard() {
       await createLecturerAccount(newLecturerName, newLecturerUsername, newLecturerPassword);
       setLecturers(await listLecturerAccounts());
       setNewLecturerName(''); setNewLecturerUsername(''); setNewLecturerPassword('');
-    } catch (e: any) { alert('Error creating lecturer: ' + e.message); }
+      toast.success('Lecturer created');
+    } catch (e: any) { toast.error('Error creating lecturer: ' + e.message); }
   };
 
   const handleDeleteLecturer = async (l: LecturerAccount) => {
@@ -217,40 +235,61 @@ export default function AdminDashboard() {
       const warning = gradeCount > 0
         ? `${l.name} has submitted ${gradeCount} grade(s). Deleting this account will permanently delete those grades too. Continue?`
         : `Delete lecturer "${l.name}"? This cannot be undone.`;
-      if (!confirm(warning)) return;
-      await deleteLecturerAccount(l.id);
-      setLecturers(await listLecturerAccounts());
-    } catch (e: any) { alert('Error deleting lecturer: ' + e.message); }
+      
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Delete Lecturer',
+        message: warning,
+        onConfirm: async () => {
+          try {
+            await deleteLecturerAccount(l.id);
+            setLecturers(await listLecturerAccounts());
+            toast.success('Lecturer deleted');
+          } catch (e: any) { toast.error('Error deleting lecturer: ' + e.message); }
+        }
+      });
+    } catch (e: any) { toast.error('Error checking lecturer grades: ' + e.message); }
   };
 
-  const handleToggleLock = async (teamId: string, lecturerId: string, currentStatus: string) => {
+  const handleToggleLock = (teamId: string, lecturerId: string, currentStatus: string) => {
     const isLocked = currentStatus === 'Completed';
     const actionText = isLocked ? 'Unlock' : 'Lock';
-    if (!confirm(`${actionText} grades for this reviewer?`)) return;
-    try {
-      await toggleTeamReviewerLock(teamId, lecturerId, activeSemesterId, !isLocked);
-      getProgress(activeSemesterId).then(setProgress);
-    } catch (e: any) { alert(e.message); }
+    
+    setConfirmDialog({
+      isOpen: true,
+      title: `${actionText} Grades`,
+      message: `${actionText} grades for this reviewer?`,
+      onConfirm: async () => {
+        try {
+          await toggleTeamReviewerLock(teamId, lecturerId, activeSemesterId, !isLocked);
+          getProgress(activeSemesterId).then(setProgress);
+          toast.success(`Grades ${isLocked ? 'unlocked' : 'locked'}.`);
+        } catch (e: any) { toast.error(e.message); }
+      }
+    });
   };
 
-  const handleDeleteTeam = async (team: TeamProgress) => {
-    if (!confirm(`Delete team "${team.team_name}" (${team.team_code})?\n\nIf the team has no grades, it will be permanently deleted. If it already has grades, it will be soft-deleted (hidden but preserved). Continue?`)) return;
-    
-    // Optimistic update
-    setProgress(prev => prev.filter(p => p.team_id !== team.team_id));
-    setTotalTeams(prev => prev - 1);
-
-    try {
-      await deleteTeam(team.team_id);
-      // Background sync
-      getTeamCount(activeSemesterId).then(setTotalTeams);
-      getProgress(activeSemesterId).then(setProgress);
-    } catch (e: any) { 
-      alert('Error deleting team: ' + e.message); 
-      // Revert on error
-      getTeamCount(activeSemesterId).then(setTotalTeams);
-      getProgress(activeSemesterId).then(setProgress);
-    }
+  const handleDeleteTeam = (team: TeamProgress) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Team',
+      message: `Delete team "${team.team_name}" (${team.team_code})?\n\nIf the team has no grades, it will be permanently deleted. If it already has grades, it will be soft-deleted (hidden but preserved). Continue?`,
+      onConfirm: async () => {
+        // Optimistic update
+        setProgress(prev => prev.filter(p => p.team_id !== team.team_id));
+        setTotalTeams(prev => prev - 1);
+        try {
+          await deleteTeam(team.team_id);
+          getTeamCount(activeSemesterId).then(setTotalTeams);
+          getProgress(activeSemesterId).then(setProgress);
+          toast.success('Team deleted');
+        } catch (e: any) { 
+          toast.error('Error deleting team: ' + e.message); 
+          getTeamCount(activeSemesterId).then(setTotalTeams);
+          getProgress(activeSemesterId).then(setProgress);
+        }
+      }
+    });
   };
 
   const downloadTeamsTemplate = () => {
@@ -296,17 +335,17 @@ export default function AdminDashboard() {
   };
 
   const exportGrades = async () => {
-    if (!activeSemesterId) return alert('Select an active tahun ajaran first');
+    if (!activeSemesterId) return toast.error('Select an active tahun ajaran first');
     setIsExporting(true);
     try {
       const rows = await exportGradesData(activeSemesterId);
-      if (rows.length === 0) return alert('No data found for this tahun ajaran');
+      if (rows.length === 0) return toast.info('No data found for this tahun ajaran');
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Grades');
       XLSX.writeFile(wb, 'PBL_Grades_Export.xlsx');
     } catch (err: any) {
-      alert('Error exporting grades: ' + err.message);
+      toast.error('Error exporting grades: ' + err.message);
     } finally { setIsExporting(false); }
   };
 
@@ -324,14 +363,14 @@ export default function AdminDashboard() {
         const plainJson = JSON.parse(JSON.stringify(json));
         const result = await importTeamsTemplate(plainJson as any, activeSemesterId);
         if (result.success) {
-          alert(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
+          toast.success(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
           setTotalTeams(await getTeamCount(activeSemesterId));
           setProgress(await getProgress(activeSemesterId));
         } else {
-          alert('Import failed:\n' + result.error);
+          toast.error('Import failed: ' + result.error);
         }
       } catch (err: any) {
-        alert('Import failed:\n' + err.message);
+        toast.error('Import failed: ' + err.message);
       } finally {
         setIsImportingTeams(false);
         if (teamsFileRef.current) teamsFileRef.current.value = '';
@@ -355,14 +394,14 @@ export default function AdminDashboard() {
         const plainJson = JSON.parse(JSON.stringify(json));
         const result = await importSiapPblTemplate(plainJson as any, activeSemesterId);
         if (result.success) {
-          alert(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
+          toast.success(`Import complete: ${result.teamsProcessed} teams, ${result.studentsProcessed} student rows.`);
           setTotalTeams(await getTeamCount(activeSemesterId));
           setProgress(await getProgress(activeSemesterId));
         } else {
-          alert('Import failed:\n' + result.error);
+          toast.error('Import failed: ' + result.error);
         }
       } catch (err: any) {
-        alert('Import failed:\n' + err.message);
+        toast.error('Import failed: ' + err.message);
       } finally {
         setIsImportingSiapPbl(false);
         if (siapPblFileRef.current) siapPblFileRef.current.value = '';
@@ -387,13 +426,13 @@ export default function AdminDashboard() {
         const plainJson = JSON.parse(JSON.stringify(json));
         const result = await importReviewersTemplate(plainJson as any, activeSemesterId);
         if (result.success) {
-          alert(`Import complete: ${result.assignmentsApplied} reviewer assignments applied (${result.rowsProcessed} rows read).`);
+          toast.success(`Import complete: ${result.assignmentsApplied} reviewer assignments applied (${result.rowsProcessed} rows read).`);
           setProgress(await getProgress(activeSemesterId));
         } else {
-          alert('Import failed:\n' + result.error);
+          toast.error('Import failed: ' + result.error);
         }
       } catch (err: any) {
-        alert('Import failed:\n' + err.message);
+        toast.error('Import failed: ' + err.message);
       } finally {
         setIsImportingReviewers(false);
         if (reviewersFileRef.current) reviewersFileRef.current.value = '';
@@ -402,11 +441,36 @@ export default function AdminDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative overflow-hidden">
+        <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
+        <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
+        
+        <header className="flex justify-between items-start animate-pulse">
+          <div>
+            <div className="h-8 w-48 bg-gray-200 dark:bg-gray-800/50 rounded-lg mb-2"></div>
+            <div className="h-4 w-72 bg-gray-100 dark:bg-gray-800/30 rounded-lg"></div>
+          </div>
+          <div className="h-8 w-24 bg-gray-200 dark:bg-gray-800/50 rounded-lg"></div>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
+          <div className="col-span-1 glass-panel h-[400px] rounded-xl border border-gray-100 dark:border-gray-800/50"></div>
+          <div className="col-span-1 lg:col-span-2 glass-panel h-[400px] rounded-xl border border-gray-100 dark:border-gray-800/50"></div>
+        </div>
+        <div className="glass-panel h-[500px] rounded-xl animate-pulse border border-gray-100 dark:border-gray-800/50"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative overflow-hidden">
       {/* Ambient Background Orbs */}
       <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
       <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
+      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} />
+      
       <header className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-navy dark:text-sky-light">Admin Dashboard</h1>
@@ -615,8 +679,8 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
-        <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative border-t border-gray-100 dark:border-gray-700">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative border-t border-gray-100 dark:border-gray-700 [mask-image:linear-gradient(to_right,transparent,black_20px,black_calc(100%-20px),transparent)]">
+          <table className="w-full text-left border-collapse min-w-[800px] pb-4">
             <thead className="sticky top-0 z-10 glass-panel shadow-sm">
               <tr>
                 <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">

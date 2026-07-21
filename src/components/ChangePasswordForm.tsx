@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { changeOwnPassword } from '@/lib/auth';
 import { KeyRound } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 // Self-service password change, used on both admin and lecturer dashboards.
 export default function ChangePasswordForm() {
@@ -11,6 +12,7 @@ export default function ChangePasswordForm() {
   const [confirm, setConfirm] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   const submit = async () => {
     setError('');
@@ -18,10 +20,11 @@ export default function ChangePasswordForm() {
     setPending(true);
     try {
       await changeOwnPassword(current, next);
-      alert('Password changed successfully.');
+      toast.success('Password changed successfully.');
       setOpen(false);
       setCurrent(''); setNext(''); setConfirm('');
     } catch (e: any) {
+      toast.error(e.message);
       setError(e.message);
     } finally {
       setPending(false);

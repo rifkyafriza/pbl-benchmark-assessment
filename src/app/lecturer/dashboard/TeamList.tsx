@@ -31,7 +31,7 @@ export default function TeamList({ teams }: { teams: any[] }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredTeams.length === 0 ? (
           <div className="col-span-full p-8 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            {teams.length === 0 ? 'No teams assigned to you as reviewer for the active semester.' : 'No teams match the selected class filter.'}
+            {teams.length === 0 ? 'No teams set as reviewer' : 'No teams match the selected class filter.'}
           </div>
         ) : (
           filteredTeams.map((team: any, i: number) => (
