@@ -75,8 +75,8 @@ function ScoreStepper({ value, onChange, disabled }: { value: number; onChange: 
           type="button"
           disabled={disabled}
           onClick={() => onChange(n)}
-          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center ${
-            value === n ? 'bg-sky text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-sm font-bold transition-all disabled:opacity-50 flex items-center justify-center active:scale-95 ${
+            value === n ? 'bg-sky text-white shadow-[0_0_15px_rgba(77,188,214,0.4)]' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
           }`}
         >
           {n}
@@ -151,8 +151,8 @@ export default function TeamGradingClient({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24">
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10 shadow-sm">
+    <div className="min-h-screen bg-gray-50/50 dark:bg-gray-900/50 pb-28">
+      <header className="glass-panel sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -208,11 +208,19 @@ export default function TeamGradingClient({
         {SCORE_CRITERIA.map(criterion => (
           <div key={criterion.key} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
             <div className="mb-2">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">{criterion.label}</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{criterion.description}</p>
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer list-none appearance-none">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">{criterion.label}</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{criterion.description}</p>
+                  </div>
+                  <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full group-open:rotate-180 transition-transform">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                </summary>
               
               {criterion.rubricLevels && (
-                <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                   <table className="w-full text-left border-collapse text-xs min-w-[600px]">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-gray-900/80">
@@ -235,6 +243,7 @@ export default function TeamGradingClient({
                   </table>
                 </div>
               )}
+              </details>
             </div>
             
             <div className="space-y-4 pt-2 divide-y divide-gray-50 dark:divide-gray-700/50">
@@ -271,7 +280,7 @@ export default function TeamGradingClient({
       </main>
 
       {!locked && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="fixed bottom-0 left-0 right-0 glass-panel border-t p-4 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <div className="max-w-4xl mx-auto flex gap-3">
             <button
               onClick={() => handleSave(false)}

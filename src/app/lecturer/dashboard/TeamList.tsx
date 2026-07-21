@@ -34,10 +34,16 @@ export default function TeamList({ teams }: { teams: any[] }) {
             {teams.length === 0 ? 'No teams assigned to you as reviewer for the active semester.' : 'No teams match the selected class filter.'}
           </div>
         ) : (
-          filteredTeams.map((team: any) => (
-            <Link prefetch={true} key={team.id} href={`/lecturer/team/${team.id}`} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-sky hover:shadow-md transition-all cursor-pointer group block">
+          filteredTeams.map((team: any, i: number) => (
+            <Link 
+              prefetch={true} 
+              key={team.id} 
+              href={`/lecturer/team/${team.id}`} 
+              className="bg-white dark:bg-gray-800 p-6 rounded-2xl antigravity-shadow antigravity-hover border border-white dark:border-gray-700/50 cursor-pointer group block opacity-0 animate-fade-in-up"
+              style={{ animationDelay: `${i * 0.05}s` }}
+            >
               <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-sky/10 text-sky rounded-lg">
+                <div className="p-3 bg-sky/10 text-sky rounded-xl">
                   <BookOpen size={24} />
                 </div>
                 <ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-sky transition-colors" />

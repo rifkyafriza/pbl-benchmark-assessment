@@ -403,7 +403,10 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative overflow-hidden">
+      {/* Ambient Background Orbs */}
+      <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
+      <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
       <header className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-navy dark:text-sky-light">Admin Dashboard</h1>
@@ -420,7 +423,7 @@ export default function AdminDashboard() {
       </header>
 
       {/* Semester Management */}
-      <section className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+      <section className="glass-panel antigravity-shadow p-6 rounded-xl">
         <div className="flex items-center gap-4 mb-4">
           <div className="p-3 bg-orange/10 rounded-lg text-orange"><BookOpen size={24} /></div>
           <h2 className="text-xl font-semibold">Tahun Ajaran Management</h2>
@@ -470,7 +473,7 @@ export default function AdminDashboard() {
       </section>
 
       {/* Lecturer accounts */}
-      <section className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+      <section className="glass-panel antigravity-shadow p-6 rounded-xl">
         <div className="flex items-center gap-4 mb-4">
           <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><UserPlus size={24} /></div>
           <h2 className="text-xl font-semibold">Lecturer Accounts</h2>
@@ -524,7 +527,7 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Templates & Import */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="glass-panel antigravity-shadow p-6 rounded-xl">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-sky/10 rounded-lg text-sky"><Upload size={24} /></div>
@@ -574,7 +577,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats & Export */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col justify-between">
+        <div className="glass-panel antigravity-shadow p-6 rounded-xl flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-4 mb-4">
               <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><Users size={24} /></div>
@@ -592,7 +595,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <section className="glass-panel antigravity-shadow rounded-xl overflow-hidden">
         <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <h2 className="text-xl font-semibold">Reviewer Grading Progress</h2>
           <div className="flex items-center gap-4">
@@ -614,7 +617,7 @@ export default function AdminDashboard() {
         </div>
         <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative border-t border-gray-100 dark:border-gray-700">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 shadow-sm">
+            <thead className="sticky top-0 z-10 glass-panel shadow-sm">
               <tr>
                 <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                   <button onClick={() => setSortDirection(s => s === 'asc' ? 'desc' : 'asc')} className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
@@ -646,11 +649,11 @@ export default function AdminDashboard() {
                     const cmp = (a.team_name || '').localeCompare(b.team_name || '');
                     return sortDirection === 'asc' ? cmp : -cmp;
                   })
-                  .map((p) => {
+                  .map((p, idx) => {
                   // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
                   const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
                   return (
-                    <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800/50 opacity-0 animate-fade-in-up" style={{ animationDelay: `${idx * 0.05}s` }}>
                       <td className="p-4">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{p.team_name}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">{p.team_code}</div>
@@ -659,7 +662,7 @@ export default function AdminDashboard() {
                         <select
                           value={p.pimpro_id || ''}
                           onChange={(e) => handlePimproChange(p.team_id, e.target.value)}
-                          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-sm dark:bg-gray-700"
+                          className="w-36 border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
                         >
                           <option value="">— none —</option>
                           {lecturerOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -678,7 +681,7 @@ export default function AdminDashboard() {
                               key={i}
                               value={slot?.lecturer_id || ''}
                               onChange={(e) => handleReviewerChange(p.team_id, slot?.lecturer_id ?? null, e.target.value)}
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-sm dark:bg-gray-700"
+                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
                             >
                               <option value="">— reviewer {i + 1}: none —</option>
                               {lecturerOptions.filter((l) => !otherIds.has(l.id)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -781,8 +784,8 @@ function LecturerEditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-sm w-full space-y-3">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="glass-panel antigravity-shadow p-6 rounded-xl max-w-sm w-full space-y-3 animate-fade-in-up">
         <h3 className="text-lg font-semibold">Edit Lecturer</h3>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
         <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
@@ -853,8 +856,8 @@ function TeamEditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg max-w-4xl w-full flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="glass-panel antigravity-shadow p-6 rounded-xl max-w-4xl w-full flex flex-col max-h-[90vh] animate-fade-in-up">
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold">Edit Team: {team.team_name}</h3>
@@ -995,7 +998,7 @@ function DocLinksModal({ team, onClose }: { team: TeamProgress; onClose: () => v
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="glass-panel antigravity-shadow rounded-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
         <div className="p-5 border-b border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Document Links</h2>
           <p className="text-sm text-gray-500 mt-1">{team.team_name}</p>
@@ -1034,7 +1037,7 @@ function DocLinksModal({ team, onClose }: { team: TeamProgress; onClose: () => v
 function ReviewerProgressModal({ data, onClose }: { data: { teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] }; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="glass-panel antigravity-shadow rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-fade-in-up">
         <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Reviewer {data.reviewerIndex} Progress</h2>
           <p className="text-sm text-gray-500 mt-1">{data.teamName} — {data.reviewerName}</p>
