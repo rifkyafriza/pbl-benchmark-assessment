@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { loginLecturer } from '@/lib/auth';
-import { User, LogIn } from 'lucide-react';
+import { User, LogIn, Loader2 } from 'lucide-react';
 
 export default function LecturerLogin() {
   const [error, setError] = useState('');
@@ -30,7 +30,15 @@ export default function LecturerLogin() {
         </div>
         {error && <p className="text-sm text-red-500">{error}</p>}
         <button disabled={pending} type="submit" className="w-full bg-navy hover:bg-navy-light text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
-          <LogIn size={20} /> {pending ? 'Logging in...' : 'Login'}
+          {pending ? (
+            <>
+              <Loader2 size={20} className="animate-spin" /> Logging in...
+            </>
+          ) : (
+            <>
+              <LogIn size={20} /> Login
+            </>
+          )}
         </button>
       </form>
     </div>
