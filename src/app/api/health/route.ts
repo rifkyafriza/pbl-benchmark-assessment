@@ -15,7 +15,8 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       service: 'pbl-benchmark-assessment'
     }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ status: 'error', message: err.message }, { status: 503 });
+  } catch (err: unknown) {
+    console.error('[health] DB check failed:', err);
+    return NextResponse.json({ status: 'error' }, { status: 503 });
   }
 }

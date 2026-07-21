@@ -17,7 +17,7 @@ export async function getProgress(academicYearId: string) {
       team_lecturers (team_id, lecturer_id, role, users(name)),
       team_students (team_id, student_id, students(kelas, nim, name)),
       grades (team_id, student_id, lecturer_id, is_locked, period, implementation_score, document_score, english_score)
-    `).eq('academic_year_id', academicYearId).eq('is_deleted', false)
+    `).eq('academic_year_id', academicYearId).eq('is_deleted', false).limit(500)
   ]);
   const period = semester?.active_period || 'ATS';
 

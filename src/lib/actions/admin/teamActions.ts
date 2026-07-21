@@ -90,11 +90,12 @@ export async function toggleTeamReviewerLock(teamId: string, lecturerId: string,
 
 export async function deleteTeam(teamId: string) {
   await requireRole('admin');
+  const validId = idSchema.parse(teamId);
   
-  await supabaseAdmin.from('grades').delete().eq('team_id', teamId);
-  await supabaseAdmin.from('team_students').delete().eq('team_id', teamId);
-  await supabaseAdmin.from('team_lecturers').delete().eq('team_id', teamId);
-  const { error } = await supabaseAdmin.from('teams').delete().eq('id', teamId);
+  await supabaseAdmin.from('grades').delete().eq('team_id', validId);
+  await supabaseAdmin.from('team_students').delete().eq('team_id', validId);
+  await supabaseAdmin.from('team_lecturers').delete().eq('team_id', validId);
+  const { error } = await supabaseAdmin.from('teams').delete().eq('id', validId);
   if (error) throw new Error(error.message);
   
   revalidatePath('/admin');
@@ -151,7 +152,9 @@ export async function addStudentToTeam(teamId: string, nim: string, name: string
 
 export async function removeStudentFromTeam(teamId: string, studentId: string) {
   await requireRole('admin');
-  const { error } = await supabaseAdmin.from('team_students').delete().eq('team_id', teamId).eq('student_id', studentId);
+  const validTeamId = idSchema.parse(teamId);
+  const validStudentId = idSchema.parse(studentId);
+  const { error } = await supabaseAdmin.from('team_students').delete().eq('team_id', validTeamId).eq('student_id', validStudentId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }

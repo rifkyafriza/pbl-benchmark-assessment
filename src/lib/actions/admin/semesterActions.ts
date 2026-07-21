@@ -18,10 +18,12 @@ export async function listSemesters() {
 export async function addSemester(name: string) {
   await requireRole('admin');
   const validName = semesterNameSchema.parse(name.trim());
-  const { data: existing } = await supabaseAdmin.from('academic_years').select('id').limit(1);
+  // Auto-activate only if no semester is currently active
+  const { data: activeOne } = await supabaseAdmin.from('academic_years').select('id').eq('is_active', true).limit(1);
+  const shouldAutoActivate = !activeOne || activeOne.length === 0;
   const { error } = await supabaseAdmin
     .from('academic_years')
-    .insert({ name: validName, is_active: !existing || existing.length === 0 });
+    .insert({ name: validName, is_active: shouldAutoActivate });
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
@@ -37,8 +39,10 @@ export async function deleteSemester(id: string) {
 export async function setActiveSemester(id: string) {
   await requireRole('admin');
   const validId = idSchema.parse(id);
-  await supabaseAdmin.from('academic_years').update({ is_active: false }).neq('id', validId);
-  await supabaseAdmin.from('academic_years').update({ is_active: true }).eq('id', validId);
+  // Single atomic UPDATE via RPC — avoids the race where two statements could
+  // leave zero active semesters if the second UPDATE fails.
+  const { error } = await supabaseAdmin.rpc('set_active_semester', { target_id: validId });
+  if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
 
