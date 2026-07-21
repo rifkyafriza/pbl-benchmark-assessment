@@ -13,6 +13,7 @@ import {
 import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
+import AddTeamModal from './AddTeamModal';
 
 function ensureAbsoluteUrl(url: string | null | undefined): string {
   if (!url) return '';
@@ -57,6 +58,7 @@ export default function AdminDashboard() {
   const [isImportingReviewers, setIsImportingReviewers] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [totalTeams, setTotalTeams] = useState(0);
+  const [isAddTeamModalOpen, setIsAddTeamModalOpen] = useState(false);
   const teamsFileRef = useRef<HTMLInputElement>(null);
   const siapPblFileRef = useRef<HTMLInputElement>(null);
   const reviewersFileRef = useRef<HTMLInputElement>(null);
@@ -523,9 +525,18 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Templates & Import */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-3 bg-sky/10 rounded-lg text-sky"><Upload size={24} /></div>
-            <h2 className="text-xl font-semibold">Import & Templates</h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-sky/10 rounded-lg text-sky"><Upload size={24} /></div>
+              <h2 className="text-xl font-semibold">Import & Templates</h2>
+            </div>
+            <button
+              onClick={() => setIsAddTeamModalOpen(true)}
+              className="bg-navy hover:bg-navy-light text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+              disabled={!activeSemesterId}
+            >
+              <Plus size={16} /> Add Team Manually
+            </button>
           </div>
           <div className="space-y-6">
             <div>
@@ -735,6 +746,13 @@ export default function AdminDashboard() {
       {selectedReviewerProgress && (
         <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
       )}
+
+      <AddTeamModal
+        isOpen={isAddTeamModalOpen}
+        onClose={() => setIsAddTeamModalOpen(false)}
+        academicYearId={activeSemesterId}
+        lecturers={lecturers}
+      />
     </div>
   );
 }

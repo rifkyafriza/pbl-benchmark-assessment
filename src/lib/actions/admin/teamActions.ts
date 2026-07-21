@@ -155,3 +155,83 @@ export async function removeStudentFromTeam(teamId: string, studentId: string) {
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
+
+export async function addTeamManual(
+  academicYearId: string,
+  teamCode: string,
+  teamName: string,
+  pimproId: string | null,
+  students: { nim: string, name: string }[]
+) {
+  await requireRole('admin');
+  const validAcademicYearId = idSchema.parse(academicYearId);
+  if (!teamCode || !teamName) throw new Error('Team Code and Team Name are required.');
+
+  // 1. Create team
+  const { data: team, error: teamError } = await supabaseAdmin
+    .from('teams')
+    .insert({
+      academic_year_id: validAcademicYearId,
+      team_code: teamCode.trim(),
+      name: teamName.trim(),
+      is_deleted: false,
+    })
+    .select('id')
+    .single();
+
+  if (teamError) throw new Error('Failed to create team: ' + teamError.message);
+  const newTeamId = team.id;
+
+  // 2. Assign pimpro (manpro) if provided
+  if (pimproId) {
+    const validPimproId = idSchema.parse(pimproId);
+    const { error: pimproError } = await supabaseAdmin
+      .from('team_lecturers')
+      .insert({ team_id: newTeamId, lecturer_id: validPimproId, role: 'pimpro' });
+    if (pimproError) throw new Error('Failed to assign Manpro: ' + pimproError.message);
+  }
+
+  // 3. Process students
+  for (const s of students) {
+    if (!s.nim || !s.name) continue;
+    
+    // Check if student exists
+    let { data: existingStudent } = await supabaseAdmin
+      .from('students')
+      .select('id')
+      .eq('nim', s.nim.trim())
+      .maybeSingle();
+
+    let studentId = existingStudent?.id;
+
+    if (!studentId) {
+      // Insert new student
+      const { data: newStudent, error: studentError } = await supabaseAdmin
+        .from('students')
+        .insert({
+          nim: s.nim.trim(),
+          name: s.name.trim(),
+        })
+        .select('id')
+        .single();
+      
+      if (studentError) throw new Error('Failed to create student: ' + studentError.message);
+      studentId = newStudent.id;
+    } else {
+      // Update existing student name
+      await supabaseAdmin
+        .from('students')
+        .update({ name: s.name.trim() })
+        .eq('id', studentId);
+    }
+
+    // Link student to team
+    const { error: linkError } = await supabaseAdmin
+      .from('team_students')
+      .insert({ team_id: newTeamId, student_id: studentId });
+    if (linkError) throw new Error('Failed to link student to team: ' + linkError.message);
+  }
+
+  revalidatePath('/admin');
+  return newTeamId;
+}
