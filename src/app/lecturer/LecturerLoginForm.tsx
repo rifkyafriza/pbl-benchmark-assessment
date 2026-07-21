@@ -7,17 +7,18 @@ export default function LecturerLogin() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
 
-  async function action(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setPending(true);
     setError('');
-    const res = await loginLecturer(formData);
+    const res = await loginLecturer(new FormData(e.currentTarget));
     if (res?.error) setError(res.error);
     setPending(false);
   }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center items-center p-4">
-      <form action={action} className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 max-w-md w-full space-y-4">
+      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 max-w-md w-full space-y-4">
         <div className="flex justify-center mb-2 text-navy dark:text-sky-light"><User size={48} /></div>
         <h1 className="text-2xl font-bold text-center mb-4 text-navy dark:text-sky-light">Lecturer Portal</h1>
         <div>
