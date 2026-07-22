@@ -248,3 +248,35 @@ export async function updateTeamClass(teamId: string, kelas: string | null) {
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
 }
+
+export async function updateTeamLinks(
+  teamId: string, 
+  links: {
+    rpp?: string;
+    laporan_akhir?: string;
+    poster?: string;
+    manual_book?: string;
+    bast?: string;
+    video_demo?: string;
+  }
+) {
+  await requireRole('admin');
+  const validId = idSchema.parse(teamId);
+  
+  // Only update fields that are defined
+  const updateData: any = {};
+  if (links.rpp !== undefined) updateData.rpp = links.rpp;
+  if (links.laporan_akhir !== undefined) updateData.laporan_akhir = links.laporan_akhir;
+  if (links.poster !== undefined) updateData.poster = links.poster;
+  if (links.manual_book !== undefined) updateData.manual_book = links.manual_book;
+  if (links.bast !== undefined) updateData.bast = links.bast;
+  if (links.video_demo !== undefined) updateData.video_demo = links.video_demo;
+
+  if (Object.keys(updateData).length === 0) return;
+
+  const { error } = await supabaseAdmin.from('teams').update(updateData).eq('id', validId);
+  if (error) throw new Error(error.message);
+  
+  revalidatePath('/admin');
+}
+

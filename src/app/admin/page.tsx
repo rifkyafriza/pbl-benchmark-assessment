@@ -8,8 +8,10 @@ import {
   updateLecturerAccount, getLecturerGradeCount, deleteLecturerAccount,
   getProgress, getTeamCount, toggleTeamReviewerLock, listAllLecturers, setTeamAssignment, setTeamReviewer,
   importTeamsTemplate, importSiapPblTemplate, importReviewersTemplate, exportGradesData,
-  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass,
 } from '@/lib/adminActions';
+import {
+  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass, updateTeamLinks,
+} from '@/lib/actions/admin/teamActions';
 import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
@@ -900,6 +902,17 @@ function TeamEditModal({
   const [newKelas, setNewKelas] = useState('');
   const [adding, setAdding] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<'members' | 'documents'>('members');
+  const [links, setLinks] = useState({
+    rpp: team.links?.rpp || '',
+    laporan_akhir: team.links?.laporan_akhir || '',
+    poster: team.links?.poster || '',
+    manual_book: team.links?.manual_book || '',
+    bast: team.links?.bast || '',
+    video_demo: team.links?.video_demo || ''
+  });
+  const [savingLinks, setSavingLinks] = useState(false);
+
   useEffect(() => {
     getTeamStudents(team.team_id)
       .then(setStudents)
@@ -951,120 +964,186 @@ function TeamEditModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 font-bold p-2">&times;</button>
         </div>
 
-        <div className="mb-4 flex items-center gap-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Team Class:</label>
-          <select 
-            value={teamKelas}
-            onChange={async (e) => {
-              const val = e.target.value;
-              setTeamKelas(val);
-              try {
-                await updateTeamClass(team.team_id, val);
-                onSaved();
-              } catch (err: any) { alert(err.message); }
-            }}
-            className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700"
+        <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 mb-4 flex-shrink-0">
+          <button 
+            onClick={() => setActiveTab('members')}
+            className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'members' ? 'border-b-2 border-sky text-sky' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
           >
-            <option value="">-- Select Class --</option>
-            <option value="Pagi">Pagi</option>
-            <option value="Malam">Malam</option>
-          </select>
+            Team Members & Info
+          </button>
+          <button 
+            onClick={() => setActiveTab('documents')}
+            className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'documents' ? 'border-b-2 border-sky text-sky' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+          >
+            Document Links
+          </button>
         </div>
-        
-        {error && <p className="text-sm text-red-500 mb-4 flex-shrink-0">{error}</p>}
-        
-        <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 min-h-0">
-          {loading ? (
-            <div className="py-4 text-center"><Loader2 className="animate-spin mx-auto text-sky" /></div>
-          ) : students.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">No students in this team.</p>
-          ) : (
-            students.map(s => (
-              <div key={s.id} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+
+        {activeTab === 'members' && (
+          <>
+            <div className="mb-4 flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Team Class:</label>
+              <select 
+                value={teamKelas}
+                onChange={async (e) => {
+                  const val = e.target.value;
+                  setTeamKelas(val);
+                  try {
+                    await updateTeamClass(team.team_id, val);
+                    onSaved();
+                  } catch (err: any) { alert(err.message); }
+                }}
+                className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700"
+              >
+                <option value="">-- Select Class --</option>
+                <option value="Pagi">Pagi</option>
+                <option value="Malam">Malam</option>
+              </select>
+            </div>
+            
+            {error && <p className="text-sm text-red-500 mb-4 flex-shrink-0">{error}</p>}
+            
+            <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 min-h-0">
+              {loading ? (
+                <div className="py-4 text-center"><Loader2 className="animate-spin mx-auto text-sky" /></div>
+              ) : students.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No students in this team.</p>
+              ) : (
+                students.map(s => (
+                  <div key={s.id} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white/50 dark:bg-gray-800/50">
+                    <input 
+                      defaultValue={s.nim} 
+                      onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name, s.prodi || '', s.semester || '', s.kelas || '') }}
+                      className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
+                      placeholder="NIM" 
+                    />
+                    <input 
+                      defaultValue={s.name} 
+                      onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value, s.prodi || '', s.semester || '', s.kelas || '') }}
+                      className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
+                      placeholder="Name" 
+                    />
+                    <input 
+                      defaultValue={s.prodi || ''} 
+                      onBlur={(e) => { if (e.target.value !== (s.prodi || '')) handleUpdateStudent(s.id, s.nim, s.name, e.target.value, s.semester || '', s.kelas || '') }}
+                      className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
+                      placeholder="Prodi" 
+                    />
+                    <input 
+                      defaultValue={s.semester || ''} 
+                      onBlur={(e) => { if (e.target.value !== (s.semester || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', e.target.value, s.kelas || '') }}
+                      className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
+                      placeholder="Semester" 
+                    />
+                    <div className="md:col-span-3 flex gap-2 w-full">
+                      <select
+                        value={s.kelas || ''}
+                        onChange={(e) => handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value)}
+                        className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky"
+                      >
+                        <option value="">Kelas</option>
+                        <option value="Pagi">Pagi</option>
+                        <option value="Malam">Malam</option>
+                      </select>
+                      <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1 flex-shrink-0 transition-colors" title="Remove student">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto flex-shrink-0">
+              <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Add New Student</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 bg-sky/5 dark:bg-sky/10 p-3 rounded-lg border border-sky/10">
                 <input 
-                  defaultValue={s.nim} 
-                  onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name, s.prodi || '', s.semester || '', s.kelas || '') }}
-                  className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  value={newNim} onChange={e => setNewNim(e.target.value)}
+                  className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
                   placeholder="NIM" 
                 />
                 <input 
-                  defaultValue={s.name} 
-                  onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value, s.prodi || '', s.semester || '', s.kelas || '') }}
-                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  value={newName} onChange={e => setNewName(e.target.value)}
+                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
                   placeholder="Name" 
                 />
                 <input 
-                  defaultValue={s.prodi || ''} 
-                  onBlur={(e) => { if (e.target.value !== (s.prodi || '')) handleUpdateStudent(s.id, s.nim, s.name, e.target.value, s.semester || '', s.kelas || '') }}
-                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  value={newProdi} onChange={e => setNewProdi(e.target.value)}
+                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
                   placeholder="Prodi" 
                 />
                 <input 
-                  defaultValue={s.semester || ''} 
-                  onBlur={(e) => { if (e.target.value !== (s.semester || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', e.target.value, s.kelas || '') }}
-                  className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700" 
+                  value={newSemester} onChange={e => setNewSemester(e.target.value)}
+                  className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
                   placeholder="Semester" 
                 />
                 <div className="md:col-span-3 flex gap-2 w-full">
                   <select
-                    value={s.kelas || ''}
-                    onChange={(e) => handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', s.semester || '', e.target.value)}
-                    className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700"
+                    value={newKelas} onChange={e => setNewKelas(e.target.value)}
+                    className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky"
                   >
                     <option value="">Kelas</option>
                     <option value="Pagi">Pagi</option>
                     <option value="Malam">Malam</option>
                   </select>
-                  <button onClick={() => handleRemoveStudent(s.id)} className="text-red-500 hover:text-red-700 p-1 flex-shrink-0" title="Remove student">
-                    <Trash2 size={16} />
+                  <button 
+                    onClick={handleAddStudent} disabled={adding}
+                    className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0 transition-colors"
+                  >
+                    {adding ? 'Adding...' : 'Add'}
                   </button>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
-        <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto flex-shrink-0">
-          <h4 className="text-sm font-medium mb-2">Add New Student</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2">
-            <input 
-              value={newNim} onChange={e => setNewNim(e.target.value)}
-              className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
-              placeholder="NIM" 
-            />
-            <input 
-              value={newName} onChange={e => setNewName(e.target.value)}
-              className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
-              placeholder="Name" 
-            />
-            <input 
-              value={newProdi} onChange={e => setNewProdi(e.target.value)}
-              className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
-              placeholder="Prodi" 
-            />
-            <input 
-              value={newSemester} onChange={e => setNewSemester(e.target.value)}
-              className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700" 
-              placeholder="Semester" 
-            />
-            <div className="md:col-span-3 flex gap-2 w-full">
-              <select
-                value={newKelas} onChange={e => setNewKelas(e.target.value)}
-                className="flex-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700"
+        {activeTab === 'documents' && (
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+              {[
+                { key: 'rpp', label: 'RPP (URL)', placeholder: 'https://...' },
+                { key: 'laporan_akhir', label: 'Laporan Akhir (URL)', placeholder: 'https://...' },
+                { key: 'poster', label: 'Poster (URL)', placeholder: 'https://...' },
+                { key: 'manual_book', label: 'Manual Book (URL)', placeholder: 'https://...' },
+                { key: 'bast', label: 'BAST (URL)', placeholder: 'https://...' },
+                { key: 'video_demo', label: 'Video Demo (URL)', placeholder: 'https://youtube.com/...' },
+              ].map(doc => (
+                <div key={doc.key} className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{doc.label}</label>
+                  <input
+                    type="url"
+                    value={links[doc.key as keyof typeof links]}
+                    onChange={(e) => setLinks(prev => ({ ...prev, [doc.key]: e.target.value }))}
+                    placeholder={doc.placeholder}
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:ring-2 focus:ring-sky/50 outline-none transition-shadow"
+                  />
+                </div>
+              ))}
+            </div>
+            
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4 flex justify-end">
+              <button
+                onClick={async () => {
+                  setSavingLinks(true);
+                  try {
+                    await updateTeamLinks(team.team_id, links);
+                    onSaved(); // Triggers a reload of data
+                    alert('Documents saved successfully!');
+                  } catch (e: any) {
+                    alert(e.message);
+                  } finally {
+                    setSavingLinks(false);
+                  }
+                }}
+                disabled={savingLinks}
+                className="bg-sky hover:bg-sky-dark text-white rounded-lg px-6 py-2 font-medium disabled:opacity-50 transition-colors"
               >
-                <option value="">Kelas</option>
-                <option value="Pagi">Pagi</option>
-                <option value="Malam">Malam</option>
-              </select>
-              <button 
-                onClick={handleAddStudent} disabled={adding}
-                className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0"
-              >
-                {adding ? 'Adding...' : 'Add'}
+                {savingLinks ? 'Saving...' : 'Save Documents'}
               </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
