@@ -890,6 +890,7 @@ function LecturerEditModal({
 function TeamEditModal({
   team, onClose, onSaved,
 }: { team: TeamProgress; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
   const [teamKelas, setTeamKelas] = useState(team.team_kelas || '');
   const [students, setStudents] = useState<{ id: string; nim: string; name: string; prodi?: string; semester?: string; kelas?: string; }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -925,11 +926,11 @@ function TeamEditModal({
       await updateStudent(studentId, nim, name, prodi, smt, kelas);
       setStudents(students.map(s => s.id === studentId ? { ...s, nim, name, prodi, smt, kelas } : s));
       onSaved();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const handleAddStudent = async () => {
-    if (!newNim.trim() || !newName.trim()) return alert('NIM and Name required');
+    if (!newNim.trim() || !newName.trim()) return toast.error('NIM and Name required');
     setAdding(true);
     try {
       await addStudentToTeam(team.team_id, newNim, newName, newProdi, newSemester, newKelas);
@@ -940,7 +941,7 @@ function TeamEditModal({
       setNewSemester('');
       setNewKelas('');
       onSaved();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { toast.error(e.message); }
     finally { setAdding(false); }
   };
 
@@ -950,7 +951,7 @@ function TeamEditModal({
       await removeStudentFromTeam(team.team_id, studentId);
       setStudents(students.filter(s => s.id !== studentId));
       onSaved();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { toast.error(e.message); }
   };
 
   return (
@@ -991,7 +992,7 @@ function TeamEditModal({
                   try {
                     await updateTeamClass(team.team_id, val);
                     onSaved();
-                  } catch (err: any) { alert(err.message); }
+                  } catch (err: any) { toast.error(err.message); }
                 }}
                 className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-700"
               >
@@ -1129,9 +1130,9 @@ function TeamEditModal({
                   try {
                     await updateTeamLinks(team.team_id, links);
                     onSaved(); // Triggers a reload of data
-                    alert('Documents saved successfully!');
+                    toast.success('Documents saved successfully!');
                   } catch (e: any) {
-                    alert(e.message);
+                    toast.error(e.message);
                   } finally {
                     setSavingLinks(false);
                   }
