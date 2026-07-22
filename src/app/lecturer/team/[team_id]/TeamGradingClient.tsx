@@ -154,7 +154,10 @@ export default function TeamGradingClient({
   };
 
   return (
-    <div className="min-h-screen pb-28">
+    <div className="min-h-screen pb-28 relative">
+      {/* Ambient Background Orbs */}
+      <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
+      <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
       <header className="glass-panel sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
