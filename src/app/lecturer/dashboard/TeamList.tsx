@@ -50,6 +50,18 @@ export default function TeamList({ teams }: { teams: any[] }) {
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{team.team_code} {team.team_kelas ? `— ${team.team_kelas}` : ''}</p>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{team.name}</h2>
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700/50 flex justify-between items-center">
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{team.gradingPercentage ?? 0}% Graded</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{team.totalStudents ?? 0} Students</span>
+                </div>
+                <div className="w-24 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${team.gradingPercentage === 100 ? 'bg-green-500' : 'bg-sky'}`} 
+                    style={{ width: `${Math.max(0, Math.min(100, team.gradingPercentage ?? 0))}%` }}
+                  />
+                </div>
+              </div>
             </Link>
           ))
         )}

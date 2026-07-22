@@ -11,7 +11,7 @@ export async function getMyReviewTeams() {
 
   const { data: activeAcademicYear } = await supabaseAdmin
     .from('academic_years')
-    .select('id')
+    .select('id, active_period')
     .eq('is_active', true)
     .maybeSingle();
   if (!activeAcademicYear) return { lecturerName: session.name, teams: [] as any[] };
@@ -21,7 +21,8 @@ export async function getMyReviewTeams() {
     .select(`
       id, name, team_code, kelas,
       team_lecturers!inner(lecturer_id, role),
-      team_students (students(kelas))
+      team_students (student_id),
+      grades (implementation_score, document_score, english_score, period, lecturer_id)
     `)
     .eq('academic_year_id', activeAcademicYear.id)
     .eq('is_deleted', false)
@@ -29,12 +30,29 @@ export async function getMyReviewTeams() {
     .eq('team_lecturers.role', 'reviewer')
     .order('team_code');
 
+  const period = activeAcademicYear.active_period || 'ATS';
+
   const teamsWithKelas = (teams || []).map((t: any) => {
+    const totalStudents = (t.team_students || []).length;
+    const totalGradeItems = totalStudents * 3;
+    const myGrades = (t.grades || []).filter((g: any) => g.period === period && g.lecturer_id === session.id);
+    
+    let filledGradeItems = 0;
+    for (const g of myGrades) {
+      if ((g.implementation_score || 0) > 0) filledGradeItems++;
+      if ((g.document_score || 0) > 0) filledGradeItems++;
+      if ((g.english_score || 0) > 0) filledGradeItems++;
+    }
+    
+    const percentage = totalGradeItems > 0 ? Math.round((filledGradeItems / totalGradeItems) * 100) : 0;
+
     return {
       id: t.id,
       name: t.name,
       team_code: t.team_code,
-      team_kelas: t.kelas || null
+      team_kelas: t.kelas || null,
+      totalStudents,
+      gradingPercentage: percentage
     };
   });
 
