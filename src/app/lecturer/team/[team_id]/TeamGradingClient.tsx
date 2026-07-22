@@ -154,7 +154,7 @@ export default function TeamGradingClient({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50 dark:bg-gray-900/50 pb-28">
+    <div className="min-h-screen pb-28">
       <header className="glass-panel sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
