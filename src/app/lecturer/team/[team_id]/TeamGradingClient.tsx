@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { saveGrades } from '@/lib/lecturerActions';
+import toast from 'react-hot-toast';
 
 type Student = { id: string; name: string; nim: string; kelas?: string | null };
 type GradeEntry = { implementation_score: number; document_score: number; english_score: number; comment: string };
@@ -139,6 +140,7 @@ export default function TeamGradingClient({
         comment: teamComment,
       }));
       await saveGrades(team.id, entries, finalize);
+      toast.success(finalize ? 'Grades finalized and locked!' : 'Draft saved successfully!');
       if (finalize) {
         setLocked(true);
         router.push('/lecturer/dashboard');

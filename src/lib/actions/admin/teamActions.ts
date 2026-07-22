@@ -187,8 +187,13 @@ export async function addTeamManual(
       team_code: teamCode.trim(),
       name: teamName.trim(),
       kelas: kelas,
-      links: links || {},
       is_deleted: false,
+      rpp: links?.rpp || null,
+      laporan_akhir: links?.laporan_akhir || null,
+      poster: links?.poster || null,
+      manual_book: links?.manual_book || null,
+      bast: links?.bast || null,
+      video_demo: links?.video_demo || null,
     })
     .select('id')
     .single();
