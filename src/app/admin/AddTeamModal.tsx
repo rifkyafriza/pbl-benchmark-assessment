@@ -12,16 +12,21 @@ type Lecturer = {
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   academicYearId: string;
   lecturers: Lecturer[];
 };
 
-export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturers }: Props) {
+export default function AddTeamModal({ isOpen, onClose, onSuccess, academicYearId, lecturers }: Props) {
   const [teamCode, setTeamCode] = useState('');
   const [teamName, setTeamName] = useState('');
   const [pimproId, setPimproId] = useState('');
   const [teamKelas, setTeamKelas] = useState('');
   const [students, setStudents] = useState([{ nim: '', name: '' }]);
+  const [activeTab, setActiveTab] = useState<'members' | 'documents'>('members');
+  const [links, setLinks] = useState({
+    rpp: '', laporan_akhir: '', poster: '', manual_book: '', bast: '', video_demo: ''
+  });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,7 +71,8 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
         teamName,
         pimproId || null,
         teamKelas || null,
-        validStudents
+        validStudents,
+        links
       );
       // Reset and close
       setTeamCode('');
@@ -74,6 +80,9 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
       setPimproId('');
       setTeamKelas('');
       setStudents([{ nim: '', name: '' }]);
+      setLinks({ rpp: '', laporan_akhir: '', poster: '', manual_book: '', bast: '', video_demo: '' });
+      setActiveTab('members');
+      if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
       setError(err.message || 'An error occurred.');
@@ -92,8 +101,27 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
           </button>
         </div>
 
+        <div className="px-6 pt-4 border-b border-gray-100 dark:border-gray-700 flex gap-4">
+          <button
+            type="button"
+            onClick={() => setActiveTab('members')}
+            className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'members' ? 'border-b-2 border-sky text-sky' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+          >
+            Team Details & Members
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('documents')}
+            className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'documents' ? 'border-b-2 border-sky text-sky' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+          >
+            Document Links
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {activeTab === 'members' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Team Code *</label>
               <input
@@ -186,6 +214,32 @@ export default function AddTeamModal({ isOpen, onClose, academicYearId, lecturer
               ))}
             </div>
           </div>
+            </div>
+          )}
+
+          {activeTab === 'documents' && (
+            <div className="space-y-4">
+              {[
+                { key: 'rpp', label: 'RPP (URL)', placeholder: 'https://...' },
+                { key: 'laporan_akhir', label: 'Laporan Akhir (URL)', placeholder: 'https://...' },
+                { key: 'poster', label: 'Poster (URL)', placeholder: 'https://...' },
+                { key: 'manual_book', label: 'Manual Book (URL)', placeholder: 'https://...' },
+                { key: 'bast', label: 'BAST (URL)', placeholder: 'https://...' },
+                { key: 'video_demo', label: 'Video Demo (URL)', placeholder: 'https://youtube.com/...' },
+              ].map(doc => (
+                <div key={doc.key} className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{doc.label}</label>
+                  <input
+                    type="url"
+                    value={links[doc.key as keyof typeof links]}
+                    onChange={(e) => setLinks(prev => ({ ...prev, [doc.key]: e.target.value }))}
+                    placeholder={doc.placeholder}
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg p-2.5 outline-none focus:border-sky bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
 

@@ -165,7 +165,15 @@ export async function addTeamManual(
   teamName: string,
   pimproId: string | null,
   kelas: string | null,
-  students: { nim: string, name: string }[]
+  students: { nim: string, name: string }[],
+  links?: {
+    rpp?: string;
+    laporan_akhir?: string;
+    poster?: string;
+    manual_book?: string;
+    bast?: string;
+    video_demo?: string;
+  }
 ) {
   await requireRole('admin');
   const validAcademicYearId = idSchema.parse(academicYearId);
@@ -179,6 +187,7 @@ export async function addTeamManual(
       team_code: teamCode.trim(),
       name: teamName.trim(),
       kelas: kelas,
+      links: links || {},
       is_deleted: false,
     })
     .select('id')

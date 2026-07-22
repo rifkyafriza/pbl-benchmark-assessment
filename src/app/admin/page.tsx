@@ -840,6 +840,13 @@ export default function AdminDashboard() {
     <AddTeamModal
       isOpen={isAddTeamModalOpen}
       onClose={() => setIsAddTeamModalOpen(false)}
+      onSuccess={async () => {
+        setIsAddTeamModalOpen(false);
+        if (activeSemesterId) {
+          setProgress(await getProgress(activeSemesterId));
+          setTotalTeams(await getTeamCount(activeSemesterId));
+        }
+      }}
       academicYearId={activeSemesterId}
       lecturers={lecturers}
     />
