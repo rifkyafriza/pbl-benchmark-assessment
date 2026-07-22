@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { saveGrades } from '@/lib/lecturerActions';
-import toast from 'react-hot-toast';
+import { useToast } from '@/components/Toast';
 
 type Student = { id: string; name: string; nim: string; kelas?: string | null };
 type GradeEntry = { implementation_score: number; document_score: number; english_score: number; comment: string };
@@ -101,6 +101,7 @@ export default function TeamGradingClient({
   period?: 'ATS' | 'AAS';
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [grades, setGrades] = useState<Record<string, GradeEntry>>(initialGrades);
   
   const initialTeamComment = Object.values(initialGrades)[0]?.comment || '';
