@@ -193,31 +193,46 @@ export default function AdminDashboard() {
   };
 
   const handleSetActiveSemester = async (id: string) => {
-    const previousActive = activeSemesterId;
-    const previousSemesters = [...semesters];
-    setSemesters(semesters.map((s) => ({ ...s, is_active: s.id === id })));
-    setActiveSemesterId(id);
-    try {
-      await setActiveSemester(id);
-      toast.success('Active tahun ajaran updated');
-    } catch (e: any) {
-      toast.error('Error setting active semester: ' + e.message);
-      setSemesters(previousSemesters);
-      setActiveSemesterId(previousActive);
-    }
+    const semesterName = semesters.find(s => s.id === id)?.name || 'this semester';
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Change Active Tahun Ajaran',
+      message: `Are you sure you want to set ${semesterName} as the active tahun ajaran?`,
+      onConfirm: async () => {
+        const previousActive = activeSemesterId;
+        const previousSemesters = [...semesters];
+        setSemesters(semesters.map((s) => ({ ...s, is_active: s.id === id })));
+        setActiveSemesterId(id);
+        try {
+          await setActiveSemester(id);
+          toast.success('Active tahun ajaran updated');
+        } catch (e: any) {
+          toast.error('Error setting active semester: ' + e.message);
+          setSemesters(previousSemesters);
+          setActiveSemesterId(previousActive);
+        }
+      }
+    });
   };
 
   const handleSetActivePeriod = async (semesterId: string, period: 'ATS' | 'AAS') => {
-    const previousSemesters = [...semesters];
-    setSemesters(semesters.map((s) => (s.id === semesterId ? { ...s, active_period: period } : s)));
-    try {
-      await setActivePeriod(semesterId, period);
-      getProgress(semesterId).then(setProgress);
-      toast.success('Active period updated');
-    } catch (e: any) { 
-      toast.error('Error setting active period: ' + e.message); 
-      setSemesters(previousSemesters);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Change Active Period',
+      message: `Are you sure you want to change the active period to ${period}?`,
+      onConfirm: async () => {
+        const previousSemesters = [...semesters];
+        setSemesters(semesters.map((s) => (s.id === semesterId ? { ...s, active_period: period } : s)));
+        try {
+          await setActivePeriod(semesterId, period);
+          getProgress(semesterId).then(setProgress);
+          toast.success('Active period updated');
+        } catch (e: any) { 
+          toast.error('Error setting active period: ' + e.message); 
+          setSemesters(previousSemesters);
+        }
+      }
+    });
   };
 
   const handleCreateLecturer = async () => {
@@ -443,7 +458,7 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative overflow-hidden">
+      <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative">
         <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
         <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
         
@@ -465,12 +480,13 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative overflow-hidden">
+    <>
+    <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative">
       {/* Ambient Background Orbs */}
       <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
       <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
-      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} />
       
+
       <header className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-navy dark:text-sky-light">Admin Dashboard</h1>
@@ -568,27 +584,7 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      {editingLecturer && (
-        <LecturerEditModal
-          lecturer={editingLecturer}
-          onClose={() => setEditingLecturer(null)}
-          onSaved={async () => { setLecturers(await listLecturerAccounts()); setEditingLecturer(null); }}
-        />
-      )}
-
-      {editingTeam && (
-        <TeamEditModal
-          team={editingTeam}
-          onClose={() => setEditingTeam(null)}
-          onSaved={async () => {
-            if (activeSemesterId) {
-              setProgress(await getProgress(activeSemesterId));
-              setTotalTeams(await getTeamCount(activeSemesterId));
-            }
-          }}
-        />
-      )}
-
+      {/* Modals were moved to the root level */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Templates & Import */}
         <div className="glass-panel antigravity-shadow p-6 rounded-xl">
@@ -806,21 +802,46 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      {selectedDocsTeam && (
-        <DocLinksModal team={selectedDocsTeam} onClose={() => setSelectedDocsTeam(null)} />
-      )}
+      </div>
 
-      {selectedReviewerProgress && (
-        <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
-      )}
+    <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} />
 
-      <AddTeamModal
-        isOpen={isAddTeamModalOpen}
-        onClose={() => setIsAddTeamModalOpen(false)}
-        academicYearId={activeSemesterId}
-        lecturers={lecturers}
+    {editingLecturer && (
+      <LecturerEditModal
+        lecturer={editingLecturer}
+        onClose={() => setEditingLecturer(null)}
+        onSaved={async () => { setLecturers(await listLecturerAccounts()); setEditingLecturer(null); }}
       />
-    </div>
+    )}
+
+    {editingTeam && (
+      <TeamEditModal
+        team={editingTeam}
+        onClose={() => setEditingTeam(null)}
+        onSaved={async () => {
+          if (activeSemesterId) {
+            setProgress(await getProgress(activeSemesterId));
+            setTotalTeams(await getTeamCount(activeSemesterId));
+          }
+        }}
+      />
+    )}
+
+    {selectedDocsTeam && (
+      <DocLinksModal team={selectedDocsTeam} onClose={() => setSelectedDocsTeam(null)} />
+    )}
+
+    {selectedReviewerProgress && (
+      <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
+    )}
+
+    <AddTeamModal
+      isOpen={isAddTeamModalOpen}
+      onClose={() => setIsAddTeamModalOpen(false)}
+      academicYearId={activeSemesterId}
+      lecturers={lecturers}
+    />
+    </>
   );
 }
 
