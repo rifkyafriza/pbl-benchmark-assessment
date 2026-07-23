@@ -212,64 +212,71 @@ export default function TeamGradingClient({
         </div>
 
         {SCORE_CRITERIA.map(criterion => (
-          <div key={criterion.key} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
-            <div className="mb-2">
-              <details className="group">
-                <summary className="flex items-center justify-between cursor-pointer list-none appearance-none">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">{criterion.label}</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{criterion.description}</p>
-                  </div>
-                  <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full group-open:rotate-180 transition-transform">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                  </div>
-                </summary>
-              
-              {criterion.rubricLevels && (
-                <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
-                  <table className="w-full text-left border-collapse text-xs min-w-[600px]">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-900/80">
-                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">1 - Poor</th>
-                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">2 - Fair</th>
-                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">3 - Good</th>
-                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">4 - Very Good</th>
-                        <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">5 - Excellent</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        {criterion.rubricLevels.map((level, i) => (
-                          <td key={i} className="p-2.5 border-r border-gray-200 dark:border-gray-700 last:border-r-0 text-gray-600 dark:text-gray-400 align-top leading-relaxed">
-                            {level}
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              </details>
-            </div>
+          <details key={criterion.key} className="group/category bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700" open>
+            <summary className="p-5 flex items-center justify-between cursor-pointer list-none appearance-none border-b border-transparent group-open/category:border-gray-100 dark:group-open/category:border-gray-700 transition-colors">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">{criterion.label}</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{criterion.description}</p>
+              </div>
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full group-open/category:rotate-180 transition-transform shrink-0 ml-4">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </div>
+            </summary>
             
-            <div className="space-y-4 pt-2 divide-y divide-gray-50 dark:divide-gray-700/50">
-              {filteredStudents.map(student => {
-                 const currentScore = grades[student.id]?.[criterion.key] || 0;
-                 return (
-                   <div key={student.id} className="pt-4 first:pt-2 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                     <div>
-                        <h3 className="font-bold text-gray-900 dark:text-gray-100">{student.name}</h3>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">{student.nim} {student.kelas ? `· ${student.kelas}` : ''}</p>
+            <div className="p-5 pt-4 space-y-4">
+              <div className="mb-2">
+                <details className="group/rubric">
+                  <summary className="flex items-center gap-2 cursor-pointer list-none appearance-none text-sky text-sm font-bold w-max hover:opacity-80 transition-opacity">
+                    <svg className="group-open/rubric:rotate-90 transition-transform" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    View Rubric Matrix
+                  </summary>
+                
+                  {criterion.rubricLevels && (
+                    <div className="mt-3 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                      <table className="w-full text-left border-collapse text-xs min-w-[600px]">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-900/80">
+                            <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">1 - Poor</th>
+                            <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">2 - Fair</th>
+                            <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">3 - Good</th>
+                            <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">4 - Very Good</th>
+                            <th className="p-2.5 border-b border-gray-200 dark:border-gray-700 font-semibold text-gray-700 dark:text-gray-300 w-1/5 border-r last:border-r-0">5 - Excellent</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            {criterion.rubricLevels.map((level, i) => (
+                              <td key={i} className="p-2.5 border-r border-gray-200 dark:border-gray-700 last:border-r-0 text-gray-600 dark:text-gray-400 align-top leading-relaxed">
+                                {level}
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </details>
+              </div>
+              
+              <div className="space-y-4 pt-2 divide-y divide-gray-50 dark:divide-gray-700/50">
+                {filteredStudents.map(student => {
+                   const currentScore = grades[student.id]?.[criterion.key] || 0;
+                   return (
+                     <div key={student.id} className="pt-4 first:pt-2 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                       <div>
+                          <h3 className="font-bold text-gray-900 dark:text-gray-100">{student.name}</h3>
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">{student.nim} {student.kelas ? `· ${student.kelas}` : ''}</p>
+                       </div>
+                       <div className="flex items-center gap-3">
+                          <ScoreStepper value={currentScore} onChange={(v) => update(student.id, criterion.key, v)} disabled={locked} />
+                          <span className="w-14 text-center font-black text-sky text-sm bg-sky/10 px-2 py-1.5 rounded-lg shrink-0">{currentScore} / 5</span>
+                       </div>
                      </div>
-                     <div className="flex items-center gap-3">
-                        <ScoreStepper value={currentScore} onChange={(v) => update(student.id, criterion.key, v)} disabled={locked} />
-                        <span className="w-14 text-center font-black text-sky text-sm bg-sky/10 px-2 py-1.5 rounded-lg shrink-0">{currentScore} / 5</span>
-                     </div>
-                   </div>
-                 );
-              })}
+                   );
+                })}
+              </div>
             </div>
-          </div>
+          </details>
         ))}
 
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
