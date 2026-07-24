@@ -22,7 +22,7 @@ export async function getMyReviewTeams() {
       id, name, team_code, kelas,
       team_lecturers!inner(lecturer_id, role),
       team_students (student_id),
-      grades (implementation_score, document_score, english_score, period, lecturer_id)
+      grades (implementation_score, document_score, english_score, period, lecturer_id, is_locked)
     `)
     .eq('academic_year_id', activeAcademicYear.id)
     .eq('is_deleted', false)
@@ -45,6 +45,11 @@ export async function getMyReviewTeams() {
     }
     
     const percentage = totalGradeItems > 0 ? Math.round((filledGradeItems / totalGradeItems) * 100) : 0;
+    const finalizedCount = myGrades.filter((g: any) => g.is_locked).length;
+    const isLocked = finalizedCount === totalStudents && totalStudents > 0;
+    let status = 'Empty';
+    if (isLocked) status = 'Locked';
+    else if (filledGradeItems > 0) status = 'Draft';
 
     return {
       id: t.id,
@@ -52,7 +57,8 @@ export async function getMyReviewTeams() {
       team_code: t.team_code,
       team_kelas: t.kelas || null,
       totalStudents,
-      gradingPercentage: percentage
+      gradingPercentage: percentage,
+      status
     };
   });
 

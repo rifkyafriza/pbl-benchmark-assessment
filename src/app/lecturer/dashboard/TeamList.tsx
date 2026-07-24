@@ -35,10 +35,10 @@ export default function TeamList({ teams }: { teams: any[] }) {
           </div>
         ) : (
           filteredTeams.map((team: any, i: number) => (
-            <Link 
-              prefetch={true} 
-              key={team.id} 
-              href={`/lecturer/team/${team.id}`} 
+            <Link
+              prefetch={true}
+              key={team.id}
+              href={`/lecturer/team/${team.id}`}
               className="bg-white dark:bg-gray-800 p-6 rounded-2xl antigravity-shadow antigravity-hover border border-white dark:border-gray-700/50 cursor-pointer group block opacity-0 animate-fade-in-up"
               style={{ animationDelay: `${i * 0.05}s` }}
             >
@@ -49,15 +49,25 @@ export default function TeamList({ teams }: { teams: any[] }) {
                 <ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-sky transition-colors" />
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{team.team_code} {team.team_kelas ? `— ${team.team_kelas}` : ''}</p>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{team.name}</h2>
+              <div className="flex justify-between items-center mb-1">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">{team.name}</h2>
+                {team.status && team.status !== 'Empty' && (
+                  <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${team.status === 'Locked' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800' :
+                    team.status === 'Draft' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800' :
+                      'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                    }`}>
+                    {team.status}
+                  </span>
+                )}
+              </div>
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700/50 flex justify-between items-center">
                 <div className="flex flex-col">
                   <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{team.gradingPercentage ?? 0}% Graded</span>
                   <span className="text-xs text-gray-500 dark:text-gray-400">{team.totalStudents ?? 0} Students</span>
                 </div>
                 <div className="w-24 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${team.gradingPercentage === 100 ? 'bg-green-500' : 'bg-sky'}`} 
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${team.gradingPercentage === 100 ? 'bg-green-500' : 'bg-sky'}`}
                     style={{ width: `${Math.max(0, Math.min(100, team.gradingPercentage ?? 0))}%` }}
                   />
                 </div>
