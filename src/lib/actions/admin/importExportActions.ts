@@ -306,7 +306,7 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
 
   const errors: string[] = [];
   const teamCodeCache = new Map<string, string | null>();
-  const toApply: { teamId: string; lecturerId: string }[] = [];
+  const toApply: { teamId: string; lecturerId: string; order: number }[] = [];
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -352,18 +352,32 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
         continue;
       }
       rowLecturerIds.add(resolved.id);
-      toApply.push({ teamId, lecturerId: resolved.id });
+      toApply.push({ teamId, lecturerId: resolved.id, order: slot.label === 'REVIEWER 1' ? 1 : slot.label === 'REVIEWER 2' ? 2 : 3 });
     }
   }
 
   if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
 
   if (toApply.length > 0) {
-    const { data: existingAll } = await supabaseAdmin.from('team_lecturers').select('team_id, lecturer_id').eq('role', 'reviewer').in('team_id', toApply.map(x => x.teamId));
-    const existingSet = new Set((existingAll||[]).map(x => `${x.team_id}_${x.lecturer_id}`));
-    const newInserts = toApply.filter(x => !existingSet.has(`${x.teamId}_${x.lecturerId}`));
+    const { data: existingAll } = await supabaseAdmin.from('team_lecturers').select('team_id, lecturer_id, reviewer_order').eq('role', 'reviewer').in('team_id', toApply.map(x => x.teamId));
+    const existingMap = new Map((existingAll||[]).map(x => [`${x.team_id}_${x.lecturer_id}`, x]));
+    
+    const newInserts = [];
+    const updates = [];
+    for (const apply of toApply) {
+       const key = `${apply.teamId}_${apply.lecturerId}`;
+       const existing = existingMap.get(key);
+       if (!existing) {
+         newInserts.push({ team_id: apply.teamId, lecturer_id: apply.lecturerId, role: 'reviewer', reviewer_order: apply.order });
+       } else if (existing.reviewer_order !== apply.order) {
+         updates.push({ team_id: apply.teamId, lecturer_id: apply.lecturerId, role: 'reviewer', reviewer_order: apply.order });
+       }
+    }
     if (newInserts.length > 0) {
-      await supabaseAdmin.from('team_lecturers').insert(newInserts.map(x => ({ team_id: x.teamId, lecturer_id: x.lecturerId, role: 'reviewer' })));
+       await supabaseAdmin.from('team_lecturers').insert(newInserts);
+    }
+    if (updates.length > 0) {
+       await supabaseAdmin.from('team_lecturers').upsert(updates, { onConflict: 'team_id, lecturer_id' });
     }
   }
 
@@ -373,31 +387,15 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
 
 // ─── Score ↔ Level helpers ────────────────────────────────────────────────────
 
-const SCORE_TO_LEVEL: Record<number, number> = { 0: 0, 47: 1, 62: 2, 77: 3, 90: 4, 100: 5 };
-
 function scoreToLevelStr(score: number | null | undefined): string {
-  if (score === null || score === undefined) return 'Level 0';
-  const level = SCORE_TO_LEVEL[score];
-  return level !== undefined ? `Level ${level}` : 'Level 0';
-}
-
-function scoreToNum(score: number | null | undefined): number {
-  return score ?? 0;
-}
-
-/** Average non-null values only. Falls back to 0 if none supplied. */
-function smartAvg(...values: (number | string | null | undefined)[]): number {
-  const valid = values.filter((v): v is number => typeof v === 'number');
-  if (valid.length === 0) return 0;
-  return valid.reduce((s, v) => s + v, 0) / valid.length;
+  if (score === null || score === undefined) return '';
+  return `Level ${score}`;
 }
 
 // ─── Header (A–Z) ─────────────────────────────────────────────────────────────
 
 const EXPORT_HEADER: (string | number)[] = [
-  'Nama',                 // A
-  'NIM',                  // B
-  'Nama Mahasiswa',       // C
+  'Kode PBL', 'NIM', 'Nama Mahasiswa',       // A B C
   'Level b7 R1', 'Level b7 R2', 'Level b7 R3',   // D E F
   'Level c1 R1', 'Level c1 R2', 'Level c1 R3',   // G H I
   'Level c7 R1', 'Level c7 R2', 'Level c7 R3',   // J K L
@@ -457,8 +455,15 @@ export async function exportGradesData(academicYearId: string): Promise<{
 
   // reviewer_order map: "teamId_lecturerId" → order number
   const reviewerOrderMap = new Map<string, number>();
+  const reviewerTeamIds = new Set<string>();
   for (const rl of reviewerLinks || []) {
     reviewerOrderMap.set(`${rl.team_id}_${rl.lecturer_id}`, rl.reviewer_order ?? 99);
+    reviewerTeamIds.add(rl.team_id);
+  }
+
+  const teamCodeMap = new Map<string, string>();
+  for (const t of teams) {
+    teamCodeMap.set(t.id, t.team_code || '');
   }
 
   function buildRows(period: 'ATS' | 'AAS'): (string | number)[][] {
@@ -466,9 +471,12 @@ export async function exportGradesData(academicYearId: string): Promise<{
     const rows: (string | number)[][] = [EXPORT_HEADER];
 
     for (const ts of (teamStudents || [])) {
+      if (!reviewerTeamIds.has(ts.team_id)) continue;
+
       const student = ts.students as any;
       const nim = student?.nim || '';
       const name = (student?.name || '').trim();
+      const kodePBL = teamCodeMap.get(ts.team_id) || '';
 
       // All grades for this student this period, sorted by reviewer_order then lecturer_id
       const sg = periodGrades
@@ -483,7 +491,7 @@ export async function exportGradesData(academicYearId: string): Promise<{
       const g2 = sg[1] ?? null;
       const g3 = sg[2] ?? null;
 
-      // Level strings — always at least Level 0 for R1/R2; R3 blank if absent
+      // Level strings
       const levB7R1 = scoreToLevelStr(g1?.implementation_score);
       const levB7R2 = scoreToLevelStr(g2?.implementation_score);
       const levB7R3 = g3 ? scoreToLevelStr(g3.implementation_score) : '';
@@ -494,33 +502,36 @@ export async function exportGradesData(academicYearId: string): Promise<{
       const levC7R2 = scoreToLevelStr(g2?.english_score);
       const levC7R3 = g3 ? scoreToLevelStr(g3.english_score) : '';
 
-      // Numeric scores
-      const nB7R1 = scoreToNum(g1?.implementation_score);
-      const nB7R2 = scoreToNum(g2?.implementation_score);
-      const nB7R3 = g3 ? scoreToNum(g3.implementation_score) : '';
-      const nC1R1 = scoreToNum(g1?.document_score);
-      const nC1R2 = scoreToNum(g2?.document_score);
-      const nC1R3 = g3 ? scoreToNum(g3.document_score) : '';
-      const nC7R1 = scoreToNum(g1?.english_score);
-      const nC7R2 = scoreToNum(g2?.english_score);
-      const nC7R3 = g3 ? scoreToNum(g3.english_score) : '';
-
-      // Averages divide by actual reviewer count
-      const avgB7 = g3 ? smartAvg(nB7R1, nB7R2, nB7R3) : smartAvg(nB7R1, nB7R2);
-      const avgC1 = g3 ? smartAvg(nC1R1, nC1R2, nC1R3) : smartAvg(nC1R1, nC1R2);
-      const avgC7 = g3 ? smartAvg(nC7R1, nC7R2, nC7R3) : smartAvg(nC7R1, nC7R2);
-      const pp   = smartAvg(avgC1, avgC7);
+      const rowNum = rows.length + 1; // 1-based, +1 because EXPORT_HEADER is row 1
+      
+      const nB7R1 = { t: 'n', f: `IF(D${rowNum}="Level 5",100,IF(D${rowNum}="Level 4",90,IF(D${rowNum}="Level 3",77,IF(D${rowNum}="Level 2",62,IF(D${rowNum}="Level 1",47,IF(D${rowNum}="Level 0",0,""))))))` };
+      const nB7R2 = { t: 'n', f: `IF(E${rowNum}="Level 5",100,IF(E${rowNum}="Level 4",90,IF(E${rowNum}="Level 3",77,IF(E${rowNum}="Level 2",62,IF(E${rowNum}="Level 1",47,IF(E${rowNum}="Level 0",0,""))))))` };
+      const nB7R3 = { t: 'n', f: `IF(F${rowNum}="Level 5",100,IF(F${rowNum}="Level 4",90,IF(F${rowNum}="Level 3",77,IF(F${rowNum}="Level 2",62,IF(F${rowNum}="Level 1",47,IF(F${rowNum}="Level 0",0,""))))))` };
+      
+      const nC1R1 = { t: 'n', f: `IF(G${rowNum}="Level 5",100,IF(G${rowNum}="Level 4",90,IF(G${rowNum}="Level 3",77,IF(G${rowNum}="Level 2",62,IF(G${rowNum}="Level 1",47,IF(G${rowNum}="Level 0",0,""))))))` };
+      const nC1R2 = { t: 'n', f: `IF(H${rowNum}="Level 5",100,IF(H${rowNum}="Level 4",90,IF(H${rowNum}="Level 3",77,IF(H${rowNum}="Level 2",62,IF(H${rowNum}="Level 1",47,IF(H${rowNum}="Level 0",0,""))))))` };
+      const nC1R3 = { t: 'n', f: `IF(I${rowNum}="Level 5",100,IF(I${rowNum}="Level 4",90,IF(I${rowNum}="Level 3",77,IF(I${rowNum}="Level 2",62,IF(I${rowNum}="Level 1",47,IF(I${rowNum}="Level 0",0,""))))))` };
+      
+      const nC7R1 = { t: 'n', f: `IF(J${rowNum}="Level 5",100,IF(J${rowNum}="Level 4",90,IF(J${rowNum}="Level 3",77,IF(J${rowNum}="Level 2",62,IF(J${rowNum}="Level 1",47,IF(J${rowNum}="Level 0",0,""))))))` };
+      const nC7R2 = { t: 'n', f: `IF(K${rowNum}="Level 5",100,IF(K${rowNum}="Level 4",90,IF(K${rowNum}="Level 3",77,IF(K${rowNum}="Level 2",62,IF(K${rowNum}="Level 1",47,IF(K${rowNum}="Level 0",0,""))))))` };
+      const nC7R3 = { t: 'n', f: `IF(L${rowNum}="Level 5",100,IF(L${rowNum}="Level 4",90,IF(L${rowNum}="Level 3",77,IF(L${rowNum}="Level 2",62,IF(L${rowNum}="Level 1",47,IF(L${rowNum}="Level 0",0,""))))))` };
+      
+      const avgB7 = { t: 'n', f: `IFERROR(AVERAGE(M${rowNum}:O${rowNum}), 0)` };
+      const avgC1 = { t: 'n', f: `IFERROR(AVERAGE(Q${rowNum}:S${rowNum}), 0)` };
+      const avgC7 = { t: 'n', f: `IFERROR(AVERAGE(U${rowNum}:W${rowNum}), 0)` };
+      
+      const pp = { t: 'n', f: `IFERROR(AVERAGE(T${rowNum},X${rowNum}), 0)` };
 
       rows.push([
-        `b7. Implementation [${nim}\t${name}]`, nim, name,  // A B C
+        kodePBL, nim, name,                                 // A B C
         levB7R1, levB7R2, levB7R3,                          // D E F
         levC1R1, levC1R2, levC1R3,                          // G H I
         levC7R1, levC7R2, levC7R3,                          // J K L
-        nB7R1,  nB7R2,  nB7R3,  avgB7,                     // M N O P
-        nC1R1,  nC1R2,  nC1R3,  avgC1,                     // Q R S T
-        nC7R1,  nC7R2,  nC7R3,  avgC7,                     // U V W X
-        avgB7,                                               // Y  PR(b7)
-        pp,                                                  // Z  PP
+        nB7R1,  nB7R2,  nB7R3,  avgB7,                      // M N O P
+        nC1R1,  nC1R2,  nC1R3,  avgC1,                      // Q R S T
+        nC7R1,  nC7R2,  nC7R3,  avgC7,                      // U V W X
+        avgB7,                                              // Y  PR(b7)
+        pp,                                                 // Z  PP
       ]);
     }
 

@@ -154,6 +154,10 @@ export async function removeStudentFromTeam(teamId: string, studentId: string) {
   await requireRole('admin');
   const validTeamId = idSchema.parse(teamId);
   const validStudentId = idSchema.parse(studentId);
+  
+  // Also delete associated grades for this student in this team
+  await supabaseAdmin.from('grades').delete().eq('team_id', validTeamId).eq('student_id', validStudentId);
+
   const { error } = await supabaseAdmin.from('team_students').delete().eq('team_id', validTeamId).eq('student_id', validStudentId);
   if (error) throw new Error(error.message);
   revalidatePath('/admin');
