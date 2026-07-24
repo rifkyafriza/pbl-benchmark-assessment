@@ -53,6 +53,7 @@ export default function AdminDashboard() {
   const [lecturerOptions, setLecturerOptions] = useState<LecturerOption[]>([]);
   const [newLecturerName, setNewLecturerName] = useState('');
   const [newLecturerUsername, setNewLecturerUsername] = useState('');
+  const [newLecturerInitials, setNewLecturerInitials] = useState('');
   const [newLecturerPassword, setNewLecturerPassword] = useState('');
   const [editingLecturer, setEditingLecturer] = useState<LecturerAccount | null>(null);
   const [editingTeam, setEditingTeam] = useState<TeamProgress | null>(null);
@@ -240,9 +241,9 @@ export default function AdminDashboard() {
 
   const handleCreateLecturer = async () => {
     try {
-      await createLecturerAccount(newLecturerName, newLecturerUsername, newLecturerPassword);
+      await createLecturerAccount(newLecturerName, newLecturerUsername, newLecturerInitials, newLecturerPassword);
       setLecturers(await listLecturerAccounts());
-      setNewLecturerName(''); setNewLecturerUsername(''); setNewLecturerPassword('');
+      setNewLecturerName(''); setNewLecturerUsername(''); setNewLecturerInitials(''); setNewLecturerPassword('');
       toast.success('Lecturer created');
     } catch (e: any) { toast.error('Error creating lecturer: ' + e.message); }
   };
@@ -635,6 +636,7 @@ export default function AdminDashboard() {
                 <div key={l.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div>
                     <span className="font-medium text-gray-800 dark:text-gray-200">{l.name}</span>
+                    {l.initials && <span className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">{l.initials}</span>}
                     <span className="text-xs text-gray-500 ml-2">{l.username || '(no username set)'}</span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -649,6 +651,7 @@ export default function AdminDashboard() {
               <h3 className="text-sm font-medium text-gray-500 mb-1">Create Lecturer Account</h3>
               <input value={newLecturerName} onChange={(e) => setNewLecturerName(e.target.value)} placeholder="Full name" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
               <input value={newLecturerUsername} onChange={(e) => setNewLecturerUsername(e.target.value)} placeholder="Username" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
+              <input value={newLecturerInitials} onChange={(e) => setNewLecturerInitials(e.target.value)} placeholder="Initials (optional)" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
               <input type="password" value={newLecturerPassword} onChange={(e) => setNewLecturerPassword(e.target.value)} placeholder="Password (min 6 chars)" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
               <button onClick={handleCreateLecturer} className="w-full bg-navy hover:bg-navy-light text-white px-3 py-2 rounded-lg text-sm font-medium">Create</button>
             </div>
@@ -946,6 +949,7 @@ function LecturerEditModal({
 }: { lecturer: LecturerAccount; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(lecturer.name);
   const [username, setUsername] = useState(lecturer.username || '');
+  const [initials, setInitials] = useState(lecturer.initials || '');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -954,7 +958,7 @@ function LecturerEditModal({
     setError('');
     setPending(true);
     try {
-      await updateLecturerAccount(lecturer.id, { name, username, newPassword: password || undefined });
+      await updateLecturerAccount(lecturer.id, { name, username, initials, newPassword: password || undefined });
       onSaved();
     } catch (e: any) {
       setError(e.message);
@@ -969,6 +973,7 @@ function LecturerEditModal({
         <h3 className="text-lg font-semibold">Edit Lecturer</h3>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
         <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
+        <input value={initials} onChange={(e) => setInitials(e.target.value)} placeholder="Initials (optional)" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password (leave blank to keep unchanged)" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="flex gap-2 pt-2">
