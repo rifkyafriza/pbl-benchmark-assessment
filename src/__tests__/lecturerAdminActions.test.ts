@@ -43,16 +43,16 @@ describe('Lecturer Admin Actions', () => {
 
   describe('createLecturerAccount', () => {
     it('rejects short passwords', async () => {
-      await expect(createLecturerAccount('John Doe', 'john', '12345')).rejects.toThrow(/Password must be at least 6 characters/);
+      await expect(createLecturerAccount('John Doe', 'john', '', '12345')).rejects.toThrow(/Password must be at least 6 characters/);
     });
 
     it('rejects empty name or username', async () => {
-      await expect(createLecturerAccount('', 'john', '123456')).rejects.toThrow();
-      await expect(createLecturerAccount('John Doe', '', '123456')).rejects.toThrow();
+      await expect(createLecturerAccount('', 'john', '', '123456')).rejects.toThrow();
+      await expect(createLecturerAccount('John Doe', '', '', '123456')).rejects.toThrow();
     });
 
     it('creates a lecturer account successfully with valid data', async () => {
-      await createLecturerAccount('John Doe', 'johndoe', 'securepassword');
+      await createLecturerAccount('John Doe', 'johndoe', 'JD', 'securepassword');
       
       const insertMock = (supabaseAdmin.from('users').insert as jest.Mock);
       expect(supabaseAdmin.from).toHaveBeenCalledWith('users');
@@ -60,6 +60,7 @@ describe('Lecturer Admin Actions', () => {
         expect.objectContaining({
           name: 'John Doe',
           username: 'johndoe',
+          initials: 'JD',
           password_hash: 'hashedpassword123',
           role: 'lecturer',
         })
