@@ -394,16 +394,28 @@ function scoreToLevelStr(score: number | null | undefined): string {
 
 // ─── Header (A–Z) ─────────────────────────────────────────────────────────────
 
-const EXPORT_HEADER: (string | number)[] = [
+const EXPORT_HEADER_1: (string | number)[] = [
   'Kode PBL', 'NIM', 'Nama Mahasiswa',       // A B C
-  'Level b7 R1', 'Level b7 R2', 'Level b7 R3',   // D E F
-  'Level c1 R1', 'Level c1 R2', 'Level c1 R3',   // G H I
-  'Level c7 R1', 'Level c7 R2', 'Level c7 R3',   // J K L
-  'Nilai b7 R1', 'Nilai b7 R2', 'Nilai b7 R3', 'Avg b7',   // M N O P
-  'Nilai c1 R1', 'Nilai c1 R2', 'Nilai c1 R3', 'Avg c1',   // Q R S T
-  'Nilai c7 R1', 'Nilai c7 R2', 'Nilai c7 R3', 'Avg c7',   // U V W X
-  'PR (b7)',              // Y
-  'PP ((c1+c7)/2)',       // Z
+  'Level b7. Implementation', '', '',        // D E F
+  'Level c1. Document', '', '',              // G H I
+  'Level c7. English', '', '',               // J K L
+  'Nilai b7', '', '', 'Avg b7',              // M N O P
+  'Nilai c1', '', '', 'Avg c1',              // Q R S T
+  'Nilai c7', '', '', 'Avg c7',              // U V W X
+  'PR (b7)',                                 // Y
+  'PP ((c1+c7)/2)',                          // Z
+];
+
+const EXPORT_HEADER_2: (string | number)[] = [
+  '', '', '',                                // A B C
+  'R1', 'R2', 'R3',                          // D E F
+  'R1', 'R2', 'R3',                          // G H I
+  'R1', 'R2', 'R3',                          // J K L
+  'R1', 'R2', 'R3', '',                      // M N O P
+  'R1', 'R2', 'R3', '',                      // Q R S T
+  'R1', 'R2', 'R3', '',                      // U V W X
+  '',                                        // Y
+  '',                                        // Z
 ];
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -468,7 +480,7 @@ export async function exportGradesData(academicYearId: string): Promise<{
 
   function buildRows(period: 'ATS' | 'AAS'): (string | number)[][] {
     const periodGrades = (grades || []).filter((g) => g.period === period);
-    const rows: (string | number)[][] = [EXPORT_HEADER];
+    const rows: (string | number)[][] = [EXPORT_HEADER_1, EXPORT_HEADER_2];
 
     for (const ts of (teamStudents || [])) {
       if (!reviewerTeamIds.has(ts.team_id)) continue;
@@ -502,7 +514,7 @@ export async function exportGradesData(academicYearId: string): Promise<{
       const levC7R2 = scoreToLevelStr(g2?.english_score);
       const levC7R3 = g3 ? scoreToLevelStr(g3.english_score) : '';
 
-      const rowNum = rows.length + 1; // 1-based, +1 because EXPORT_HEADER is row 1
+      const rowNum = rows.length + 1; // 1-based, +1 because EXPORT_HEADER takes 2 rows
       
       const nB7R1 = { t: 'n', f: `IF(D${rowNum}="Level 5",100,IF(D${rowNum}="Level 4",90,IF(D${rowNum}="Level 3",77,IF(D${rowNum}="Level 2",62,IF(D${rowNum}="Level 1",47,IF(D${rowNum}="Level 0",0,""))))))` };
       const nB7R2 = { t: 'n', f: `IF(E${rowNum}="Level 5",100,IF(E${rowNum}="Level 4",90,IF(E${rowNum}="Level 3",77,IF(E${rowNum}="Level 2",62,IF(E${rowNum}="Level 1",47,IF(E${rowNum}="Level 0",0,""))))))` };

@@ -13,7 +13,7 @@ import {
   deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass, updateTeamLinks, setReviewerOrder,
 } from '@/lib/actions/admin/teamActions';
 import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
 import AddTeamModal from './AddTeamModal';
 import { useToast } from '@/components/Toast';
@@ -28,7 +28,7 @@ function ensureAbsoluteUrl(url: string | null | undefined): string {
 }
 
 type Semester = { id: string; name: string; is_active: boolean; active_period: 'ATS' | 'AAS' };
-type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] };
+type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string; reviewer_order: 1 | 2 | 3 | null; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] };
 type TeamProgress = {
   team_id: string; team_name: string; team_code: string; academic_year_id: string;
   pimpro_id: string | null; pimpro_name: string | null; team_kelas: string | null;
@@ -41,7 +41,7 @@ type LecturerOption = { id: string; name: string };
 export default function AdminDashboard() {
   const toast = useToast();
   const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; }>({
-    isOpen: false, title: '', message: '', onConfirm: () => {}
+    isOpen: false, title: '', message: '', onConfirm: () => { }
   });
 
   const [semesters, setSemesters] = useState<Semester[]>([]);
@@ -107,24 +107,24 @@ export default function AdminDashboard() {
 
   const handlePimproChange = async (teamId: string, lecturerId: string) => {
     const newPimpro = lecturerOptions.find(l => l.id === lecturerId);
-    setProgress(prev => prev.map(p => 
-      p.team_id === teamId 
-        ? { ...p, pimpro_id: newPimpro?.id || null, pimpro_name: newPimpro?.name || null } 
+    setProgress(prev => prev.map(p =>
+      p.team_id === teamId
+        ? { ...p, pimpro_id: newPimpro?.id || null, pimpro_name: newPimpro?.name || null }
         : p
     ));
-    
+
     try {
       await setTeamAssignment(teamId, 'pimpro', lecturerId || null);
       getProgress(activeSemesterId).then(setProgress); // background sync
-    } catch (e: any) { 
-      toast.error('Error updating assignment: ' + e.message); 
+    } catch (e: any) {
+      toast.error('Error updating assignment: ' + e.message);
       getProgress(activeSemesterId).then(setProgress); // revert on error
     }
   };
 
   const handleReviewerChange = async (teamId: string, previousLecturerId: string | null, newLecturerId: string) => {
     const newLecturer = lecturerOptions.find(l => l.id === newLecturerId);
-    
+
     setProgress(prev => prev.map(p => {
       if (p.team_id !== teamId) return p;
       // Replace the slot where the previous reviewer was
@@ -151,6 +151,7 @@ export default function AdminDashboard() {
           graded_students: 0,
           finalized_students: 0,
           status: 'Not Started',
+          reviewer_order: null,
           students: p.reviewers[0]?.students?.map(s => ({ ...s, is_graded: false, is_locked: false })) || []
         });
       }
@@ -160,8 +161,8 @@ export default function AdminDashboard() {
     try {
       await setTeamReviewer(teamId, previousLecturerId, newLecturerId || null);
       getProgress(activeSemesterId).then(setProgress); // background sync
-    } catch (e: any) { 
-      toast.error('Error updating reviewer: ' + e.message); 
+    } catch (e: any) {
+      toast.error('Error updating reviewer: ' + e.message);
       getProgress(activeSemesterId).then(setProgress); // revert on error
     }
   };
@@ -229,8 +230,8 @@ export default function AdminDashboard() {
           await setActivePeriod(semesterId, period);
           getProgress(semesterId).then(setProgress);
           toast.success('Active period updated');
-        } catch (e: any) { 
-          toast.error('Error setting active period: ' + e.message); 
+        } catch (e: any) {
+          toast.error('Error setting active period: ' + e.message);
           setSemesters(previousSemesters);
         }
       }
@@ -252,7 +253,7 @@ export default function AdminDashboard() {
       const warning = gradeCount > 0
         ? `${l.name} has submitted ${gradeCount} grade(s). Deleting this account will permanently delete those grades too. Continue?`
         : `Delete lecturer "${l.name}"? This cannot be undone.`;
-      
+
       setConfirmDialog({
         isOpen: true,
         title: 'Delete Lecturer',
@@ -271,7 +272,7 @@ export default function AdminDashboard() {
   const handleToggleLock = (teamId: string, lecturerId: string, currentStatus: string) => {
     const isLocked = currentStatus === 'Completed';
     const actionText = isLocked ? 'Unlock' : 'Lock';
-    
+
     setConfirmDialog({
       isOpen: true,
       title: `${actionText} Grades`,
@@ -300,8 +301,8 @@ export default function AdminDashboard() {
           getTeamCount(activeSemesterId).then(setTotalTeams);
           getProgress(activeSemesterId).then(setProgress);
           toast.success('Team deleted');
-        } catch (e: any) { 
-          toast.error('Error deleting team: ' + e.message); 
+        } catch (e: any) {
+          toast.error('Error deleting team: ' + e.message);
           getTeamCount(activeSemesterId).then(setTotalTeams);
           getProgress(activeSemesterId).then(setProgress);
         }
@@ -358,9 +359,77 @@ export default function AdminDashboard() {
       const { ats, aas } = await exportGradesData(activeSemesterId);
       if (ats.length <= 1 && aas.length <= 1) return toast.info('No data found for this tahun ajaran');
       const wb = XLSX.utils.book_new();
-      if (ats.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ats), 'ATS');
-      if (aas.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aas), 'AAS');
-      XLSX.writeFile(wb, 'Form_Assesment_Benchmark.xlsx');
+
+      const formatSheet = (aoa: any[]) => {
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Calculate auto-width
+        const colWidths = aoa[0].map((_: any, colIndex: number) => {
+          const maxLen = aoa.reduce((max: number, row: any[]) => {
+            let cellValue = "";
+            if (row[colIndex] && typeof row[colIndex] === 'object' && 'f' in row[colIndex]) {
+              cellValue = "100.00";
+            } else if (row[colIndex]) {
+              cellValue = row[colIndex].toString();
+            }
+            return Math.max(max, cellValue.length);
+          }, 10);
+          return { wch: maxLen };
+        });
+        ws['!cols'] = colWidths;
+
+        // Set Merges
+        ws['!merges'] = [
+          // Vertical merges for Kode PBL, NIM, NAMA (Cols A, B, C)
+          { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+          { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+          { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+
+          // Horizontal merges for Level headers (cols 3-5, 6-8, 9-11)
+          { s: { r: 0, c: 3 }, e: { r: 0, c: 5 } },
+          { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },
+          { s: { r: 0, c: 9 }, e: { r: 0, c: 11 } },
+
+          // Horizontal merges for Nilai headers (cols 12-14, 16-18, 20-22)
+          { s: { r: 0, c: 12 }, e: { r: 0, c: 14 } },
+          { s: { r: 0, c: 16 }, e: { r: 0, c: 18 } },
+          { s: { r: 0, c: 20 }, e: { r: 0, c: 22 } },
+
+          // Vertical merges for Averages and Totals
+          { s: { r: 0, c: 15 }, e: { r: 1, c: 15 } }, // Avg b7
+          { s: { r: 0, c: 19 }, e: { r: 1, c: 19 } }, // Avg c1
+          { s: { r: 0, c: 23 }, e: { r: 1, c: 23 } }, // Avg c7
+          { s: { r: 0, c: 24 }, e: { r: 1, c: 24 } }, // PR
+          { s: { r: 0, c: 25 }, e: { r: 1, c: 25 } }, // PP
+        ];
+
+        // Apply centering from column index 3 (D) onwards for ALL rows
+        const range = XLSX.utils.decode_range(ws['!ref'] || "A1:Z100");
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellRef]) continue;
+
+            if (C >= 3) { // From column D onwards
+              ws[cellRef].s = {
+                alignment: { horizontal: "center", vertical: "center" }
+              };
+            } else if (R <= 1) { // Header rows for A, B, C also center vertically
+              ws[cellRef].s = {
+                alignment: { vertical: "center" }
+              };
+            }
+          }
+        }
+
+        return ws;
+      };
+
+      if (ats.length > 0) XLSX.utils.book_append_sheet(wb, formatSheet(ats), 'ATS');
+      if (aas.length > 0) XLSX.utils.book_append_sheet(wb, formatSheet(aas), 'AAS');
+
+      const activeSemesterName = semesters.find(s => s.id === activeSemesterId)?.name || 'Unknown';
+      XLSX.writeFile(wb, `Form Assesment Benchmark ${activeSemesterName}.xlsx`);
       toast.success('Export complete!');
     } catch (err: any) {
       toast.error('Error exporting grades: ' + err.message);
@@ -464,7 +533,7 @@ export default function AdminDashboard() {
       <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative">
         <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
         <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
-        
+
         <header className="flex justify-between items-start animate-pulse">
           <div>
             <div className="h-8 w-48 bg-gray-200 dark:bg-gray-800/50 rounded-lg mb-2"></div>
@@ -484,401 +553,389 @@ export default function AdminDashboard() {
 
   return (
     <>
-    <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative">
-      {/* Ambient Background Orbs */}
-      <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
-      <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
-      
+      <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative">
+        {/* Ambient Background Orbs */}
+        <div className="fixed top-0 left-1/4 w-[800px] h-[800px] bg-sky/5 dark:bg-sky/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-[-50%]"></div>
+        <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] bg-orange/5 dark:bg-orange/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-[50%]"></div>
 
-      <header className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-navy dark:text-sky-light">Admin Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400">Manage tahun ajaran, teams, lecturer accounts, and track review progress.</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <ChangePasswordForm />
-          <form action={logout}>
-            <button type="submit" className="text-gray-500 hover:text-red-500 flex items-center gap-1 text-sm font-medium">
-              <LogOut size={16} /> Logout
-            </button>
-          </form>
-        </div>
-      </header>
 
-      {/* Semester Management */}
-      <section className="glass-panel antigravity-shadow p-6 rounded-xl">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="p-3 bg-orange/10 rounded-lg text-orange"><BookOpen size={24} /></div>
-          <h2 className="text-xl font-semibold">Tahun Ajaran Management</h2>
-        </div>
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="flex-1">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">Available Tahun Ajaran</h3>
-            <div className="space-y-2">
-              {semesters.map((sem) => (
-                <div key={sem.id} className={`flex items-center justify-between p-3 rounded-lg border ${sem.is_active ? 'border-sky bg-sky/5' : 'border-gray-200 dark:border-gray-700'}`}>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => handleSetActiveSemester(sem.id)} className={`w-5 h-5 rounded-full border flex items-center justify-center ${sem.is_active ? 'border-sky bg-sky text-white' : 'border-gray-300'}`}>
-                      {sem.is_active && <CheckCircle size={14} />}
-                    </button>
-                    <span className={`font-medium ${sem.is_active ? 'text-sky' : 'text-gray-700 dark:text-gray-300'}`}>{sem.name}</span>
-                    {sem.is_active && <span className="text-xs bg-sky/20 text-sky px-2 py-0.5 rounded-full">Active</span>}
-                    {sem.is_active && (
-                      <div className="flex items-center gap-1 ml-2 border border-gray-200 dark:border-gray-600 rounded-full p-0.5">
-                        {(['ATS', 'AAS'] as const).map((p) => (
-                          <button
-                            key={p}
-                            onClick={() => handleSetActivePeriod(sem.id, p)}
-                            className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
-                              sem.active_period === p ? 'bg-orange text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => handleDeleteSemester(sem.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-                </div>
-              ))}
-              {semesters.length === 0 && <p className="text-sm text-gray-500 italic">No tahun ajaran created yet.</p>}
-            </div>
-          </div>
-          <div className="md:w-1/3 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-700 md:pl-8 pt-4 md:pt-0">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">Add New Tahun Ajaran</h3>
-            <div className="flex gap-2">
-              <input type="text" value={newSemesterName} onChange={(e) => setNewSemesterName(e.target.value)} placeholder="e.g. Ganjil 2026/2027" className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
-              <button onClick={handleAddSemester} className="bg-navy hover:bg-navy-light text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><Plus size={16} /> Add</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Lecturer accounts */}
-      <section className="glass-panel antigravity-shadow p-6 rounded-xl">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><UserPlus size={24} /></div>
-          <h2 className="text-xl font-semibold">Lecturer Accounts</h2>
-        </div>
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="flex-1 space-y-2 max-h-64 overflow-y-auto">
-            {lecturers.map((l) => (
-              <div key={l.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div>
-                  <span className="font-medium text-gray-800 dark:text-gray-200">{l.name}</span>
-                  <span className="text-xs text-gray-500 ml-2">{l.username || '(no username set)'}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setEditingLecturer(l)} className="text-xs text-sky hover:underline flex items-center gap-1"><Pencil size={12} /> Edit</button>
-                  <button onClick={() => handleDeleteLecturer(l)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><Trash2 size={12} /> Delete</button>
-                </div>
-              </div>
-            ))}
-            {lecturers.length === 0 && <p className="text-sm text-gray-500 italic">No lecturer accounts yet.</p>}
-          </div>
-          <div className="md:w-1/3 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-700 md:pl-8 pt-4 md:pt-0 space-y-2">
-            <h3 className="text-sm font-medium text-gray-500 mb-1">Create Lecturer Account</h3>
-            <input value={newLecturerName} onChange={(e) => setNewLecturerName(e.target.value)} placeholder="Full name" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
-            <input value={newLecturerUsername} onChange={(e) => setNewLecturerUsername(e.target.value)} placeholder="Username" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
-            <input type="password" value={newLecturerPassword} onChange={(e) => setNewLecturerPassword(e.target.value)} placeholder="Password (min 6 chars)" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
-            <button onClick={handleCreateLecturer} className="w-full bg-navy hover:bg-navy-light text-white px-3 py-2 rounded-lg text-sm font-medium">Create</button>
-          </div>
-        </div>
-      </section>
-
-      {/* Modals were moved to the root level */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Templates & Import */}
-        <div className="glass-panel antigravity-shadow p-6 rounded-xl">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-sky/10 rounded-lg text-sky"><Upload size={24} /></div>
-              <h2 className="text-xl font-semibold">Import & Templates</h2>
-            </div>
-            <button
-              onClick={() => setIsAddTeamModalOpen(true)}
-              className="bg-navy hover:bg-navy-light text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
-              disabled={!activeSemesterId}
-            >
-              <Plus size={16} /> Add Team Manually
-            </button>
-          </div>
-          <div className="space-y-6">
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">1. Teams + Students + Pimpro</p>
-              <div className="flex gap-3 mb-2">
-                <button onClick={downloadTeamsTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
-              </div>
-              <label className={`cursor-pointer ${isImportingTeams ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
-                {isImportingTeams ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload Teams File'}
-                <input ref={teamsFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleTeamsFileUpload} disabled={isImportingTeams || !activeSemesterId} />
-              </label>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">2. SIAP PBL Data (Teams + Students + Links)</p>
-              <div className="flex gap-3 mb-2">
-                <button onClick={downloadSiapPblTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
-              </div>
-              <label className={`cursor-pointer ${isImportingSiapPbl ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
-                {isImportingSiapPbl ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload SIAP PBL File'}
-                <input ref={siapPblFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleSiapPblFileUpload} disabled={isImportingSiapPbl || !activeSemesterId} />
-              </label>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">3. Reviewer Assignments</p>
-              <div className="flex gap-3 mb-2">
-                <button onClick={downloadReviewersTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
-              </div>
-              <label className={`cursor-pointer ${isImportingReviewers ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
-                {isImportingReviewers ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload Reviewers File'}
-                <input ref={reviewersFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleReviewersFileUpload} disabled={isImportingReviewers || !activeSemesterId} />
-              </label>
-            </div>
-            {!activeSemesterId && <p className="text-xs text-red-500">Please set an active tahun ajaran first.</p>}
-          </div>
-        </div>
-
-        {/* Stats & Export */}
-        <div className="glass-panel antigravity-shadow p-6 rounded-xl flex flex-col justify-between">
+        <header className="flex justify-between items-start">
           <div>
-            <div className="flex items-center gap-4 mb-4">
-              <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><Users size={24} /></div>
-              <h2 className="text-xl font-semibold">Active Tahun Ajaran Stats</h2>
-            </div>
-            <p className="text-4xl font-bold mb-1">{totalTeams}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total Teams for {semesters.find((s) => s.id === activeSemesterId)?.name || '...'}</p>
+            <h1 className="text-3xl font-bold text-navy dark:text-sky-light">Admin Dashboard</h1>
+            <p className="text-gray-600 dark:text-gray-400">Manage tahun ajaran, teams, lecturer accounts, and track review progress.</p>
           </div>
-          <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Data</h3>
-            <button onClick={exportGrades} disabled={isExporting || !activeSemesterId} className="w-full bg-sky hover:bg-sky-dark disabled:bg-gray-400 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
-              {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Export Grades Report
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <section className="glass-panel antigravity-shadow rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-          <h2 className="text-xl font-semibold">Reviewer Grading Progress</h2>
           <div className="flex items-center gap-4">
-            <select
-              value={kelasFilter}
-              onChange={(e) => setKelasFilter(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm dark:bg-gray-700"
-            >
-              <option value="Semua">Semua Kelas</option>
-              <option value="Pagi">Kelas Pagi</option>
-              <option value="Malam">Kelas Malam</option>
-            </select>
-            {activeSemesterId && (
-              <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full whitespace-nowrap">
-                Showing: {semesters.find((s) => s.id === activeSemesterId)?.name} — {semesters.find((s) => s.id === activeSemesterId)?.active_period}
-              </span>
-            )}
+            <ChangePasswordForm />
+            <form action={logout}>
+              <button type="submit" className="text-gray-500 hover:text-red-500 flex items-center gap-1 text-sm font-medium">
+                <LogOut size={16} /> Logout
+              </button>
+            </form>
           </div>
-        </div>
-        <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative border-t border-gray-100 dark:border-gray-700 [mask-image:linear-gradient(to_right,transparent,black_20px,black_calc(100%-20px),transparent)]">
-          <table className="w-full text-left border-collapse min-w-[800px] pb-4">
-            <thead className="sticky top-0 z-10 glass-panel shadow-sm">
-              <tr>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                  <button onClick={() => setSortDirection(s => s === 'asc' ? 'desc' : 'asc')} className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
-                    Team <ArrowUpDown size={14} className="opacity-50" />
-                  </button>
-                </th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Pimpro (Manpro)</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Doc Progress</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Reviewers</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Students Graded</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Status</th>
-                <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto text-sky" /></td></tr>
-              ) : progress.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">No data available for this tahun ajaran. Import teams and reviewer assignments first.</td></tr>
-              ) : (
-                progress
-                  .filter((p) => {
-                    if (kelasFilter === 'Semua') return true;
-                    if (kelasFilter === 'Pagi') return p.team_kelas?.toLowerCase().includes('pagi');
-                    if (kelasFilter === 'Malam') return p.team_kelas?.toLowerCase().includes('malam');
-                    return true;
-                  })
-                  .sort((a, b) => {
-                    const cmp = (a.team_name || '').localeCompare(b.team_name || '');
-                    return sortDirection === 'asc' ? cmp : -cmp;
-                  })
-                  .map((p, idx) => {
-                  // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
-                  const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
-                  return (
-                    <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800/50 opacity-0 animate-fade-in-up" style={{ animationDelay: `${idx * 0.05}s` }}>
-                      <td className="p-4">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{p.team_name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{p.team_code}</div>
-                      </td>
-                      <td className="p-4">
-                        <select
-                          value={p.pimpro_id || ''}
-                          onChange={(e) => handlePimproChange(p.team_id, e.target.value)}
-                          className="w-36 border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
-                        >
-                          <option value="">— none —</option>
-                          {lecturerOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-4 whitespace-nowrap text-sm text-slate-700">
-                          <button type="button" onClick={() => setSelectedDocsTeam(p)} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${p.completed_links === 6 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : p.completed_links > 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400'}`}>
-                            {p.completed_links}/6
-                          </button>
-                      </td>
-                      <td className="p-4 space-y-1">
-                        {slots.map((slot, i) => {
-                          const otherIds = new Set(slots.filter((_, j) => j !== i).map((s) => s?.lecturer_id).filter(Boolean));
-                          return (
-                            <select
-                              key={i}
-                              value={slot?.lecturer_id || ''}
-                              onChange={(e) => handleReviewerChange(p.team_id, slot?.lecturer_id ?? null, e.target.value)}
-                              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
+        </header>
+
+        {/* Semester Management */}
+        <section className="glass-panel antigravity-shadow p-6 rounded-xl">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-orange/10 rounded-lg text-orange"><BookOpen size={24} /></div>
+            <h2 className="text-xl font-semibold">Tahun Ajaran Management</h2>
+          </div>
+          <div className="flex flex-col md:flex-row gap-8">
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-gray-500 mb-3">Available Tahun Ajaran</h3>
+              <div className="space-y-2">
+                {semesters.map((sem) => (
+                  <div key={sem.id} className={`flex items-center justify-between p-3 rounded-lg border ${sem.is_active ? 'border-sky bg-sky/5' : 'border-gray-200 dark:border-gray-700'}`}>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => handleSetActiveSemester(sem.id)} className={`w-5 h-5 rounded-full border flex items-center justify-center ${sem.is_active ? 'border-sky bg-sky text-white' : 'border-gray-300'}`}>
+                        {sem.is_active && <CheckCircle size={14} />}
+                      </button>
+                      <span className={`font-medium ${sem.is_active ? 'text-sky' : 'text-gray-700 dark:text-gray-300'}`}>{sem.name}</span>
+                      {sem.is_active && <span className="text-xs bg-sky/20 text-sky px-2 py-0.5 rounded-full">Active</span>}
+                      {sem.is_active && (
+                        <div className="flex items-center gap-1 ml-2 border border-gray-200 dark:border-gray-600 rounded-full p-0.5">
+                          {(['ATS', 'AAS'] as const).map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => handleSetActivePeriod(sem.id, p)}
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${sem.active_period === p ? 'bg-orange text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                }`}
                             >
-                              <option value="">— reviewer {i + 1}: none —</option>
-                              {lecturerOptions.filter((l) => !otherIds.has(l.id)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                            </select>
-                          );
-                        })}
-                      </td>
-                      <td className="p-4">
-                        {p.reviewers.length === 0 ? (
-                          <span className="text-sm text-gray-500">—</span>
-                        ) : (
-                          <div className="space-y-1">
-                            {p.reviewers.map((r, idx) => {
-                              const currentOrder = (r as any).reviewer_order as 1 | 2 | 3 | null;
-                              const orderLabel = currentOrder ? `R${currentOrder}` : '?';
-                              const orderColors: Record<string, string> = {
-                                R1: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-                                R2: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-                                R3: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-                                '?': 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
-                              };
-                              return (
-                                <button key={r.lecturer_id} type="button"
-                                  onClick={() => setSelectedReviewerProgress({ teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })}
-                                  className="flex items-center gap-2 hover:opacity-80 transition-opacity w-full text-left p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
-                                  <span className="text-sm font-medium w-12">{r.graded_students} / {p.total_students}</span>
-                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
-                                    <div className="h-full bg-sky" style={{ width: `${p.total_students > 0 ? (r.graded_students / p.total_students) * 100 : 0}%` }} />
-                                  </div>
-                                  {/* Reviewer order badge — click to cycle R1 → R2 → R3 → null */}
-                                  <span
-                                    role="button"
-                                    title={`Export order: ${orderLabel}. Click to change.`}
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      const next = currentOrder === 1 ? 2 : currentOrder === 2 ? 3 : currentOrder === 3 ? null : 1;
-                                      try {
-                                        await setReviewerOrder(p.team_id, r.lecturer_id, next as 1 | 2 | 3 | null);
-                                        toast.success(`${r.lecturer_name} set to ${next ? `R${next}` : 'unset'}`);
-                                        setProgress(await getProgress(activeSemesterId!));
-                                      } catch { toast.error('Failed to update reviewer order'); }
-                                    }}
-                                    className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer select-none hover:opacity-75 transition-opacity ${orderColors[orderLabel]}`}>
-                                    {orderLabel}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        {p.reviewers.length === 0 ? (
-                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">No Reviewer</span>
-                        ) : (
-                          <div className="space-y-1">
-                            {p.reviewers.map((r) => (
-                              <span key={r.lecturer_id} className={`block px-3 py-1 rounded-full text-xs font-medium w-fit ${
-                                r.status === 'Completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                r.status === 'In Progress' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                              }`}>{r.lecturer_name}: {r.status}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4 space-y-2">
-                        <div className="space-y-1">
-                          {p.reviewers.map((r) => (
-                            <button key={r.lecturer_id} onClick={() => handleToggleLock(p.team_id, r.lecturer_id, r.status)} className={`text-xs hover:underline flex items-center gap-1 ${r.status === 'Completed' ? 'text-orange-600' : 'text-gray-500'}`}>
-                              <Unlock size={14} /> {r.status === 'Completed' ? 'Unlock' : 'Lock'} {r.lecturer_name}
+                              {p}
                             </button>
                           ))}
                         </div>
-                        <div className={`flex gap-3 ${p.reviewers.length > 0 ? 'pt-2 border-t border-gray-100 dark:border-gray-700' : ''}`}>
-                          <button onClick={() => setEditingTeam(p)} className="text-xs text-sky hover:underline flex items-center gap-1"><Pencil size={14} /> Edit</button>
-                          <button onClick={() => handleDeleteTeam(p)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><Trash2 size={14} /> Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                      )}
+                    </div>
+                    <button onClick={() => handleDeleteSemester(sem.id)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                  </div>
+                ))}
+                {semesters.length === 0 && <p className="text-sm text-gray-500 italic">No tahun ajaran created yet.</p>}
+              </div>
+            </div>
+            <div className="md:w-1/3 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-700 md:pl-8 pt-4 md:pt-0">
+              <h3 className="text-sm font-medium text-gray-500 mb-3">Add New Tahun Ajaran</h3>
+              <div className="flex gap-2">
+                <input type="text" value={newSemesterName} onChange={(e) => setNewSemesterName(e.target.value)} placeholder="e.g. Ganjil 2026/2027" className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
+                <button onClick={handleAddSemester} className="bg-navy hover:bg-navy-light text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><Plus size={16} /> Add</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Lecturer accounts */}
+        <section className="glass-panel antigravity-shadow p-6 rounded-xl">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><UserPlus size={24} /></div>
+            <h2 className="text-xl font-semibold">Lecturer Accounts</h2>
+          </div>
+          <div className="flex flex-col md:flex-row gap-8">
+            <div className="flex-1 space-y-2 max-h-64 overflow-y-auto">
+              {lecturers.map((l) => (
+                <div key={l.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div>
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{l.name}</span>
+                    <span className="text-xs text-gray-500 ml-2">{l.username || '(no username set)'}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setEditingLecturer(l)} className="text-xs text-sky hover:underline flex items-center gap-1"><Pencil size={12} /> Edit</button>
+                    <button onClick={() => handleDeleteLecturer(l)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><Trash2 size={12} /> Delete</button>
+                  </div>
+                </div>
+              ))}
+              {lecturers.length === 0 && <p className="text-sm text-gray-500 italic">No lecturer accounts yet.</p>}
+            </div>
+            <div className="md:w-1/3 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-700 md:pl-8 pt-4 md:pt-0 space-y-2">
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Create Lecturer Account</h3>
+              <input value={newLecturerName} onChange={(e) => setNewLecturerName(e.target.value)} placeholder="Full name" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
+              <input value={newLecturerUsername} onChange={(e) => setNewLecturerUsername(e.target.value)} placeholder="Username" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
+              <input type="password" value={newLecturerPassword} onChange={(e) => setNewLecturerPassword(e.target.value)} placeholder="Password (min 6 chars)" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700" />
+              <button onClick={handleCreateLecturer} className="w-full bg-navy hover:bg-navy-light text-white px-3 py-2 rounded-lg text-sm font-medium">Create</button>
+            </div>
+          </div>
+        </section>
+
+        {/* Modals were moved to the root level */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Templates & Import */}
+          <div className="glass-panel antigravity-shadow p-6 rounded-xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-sky/10 rounded-lg text-sky"><Upload size={24} /></div>
+                <h2 className="text-xl font-semibold">Import & Templates</h2>
+              </div>
+              <button
+                onClick={() => setIsAddTeamModalOpen(true)}
+                className="bg-navy hover:bg-navy-light text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+                disabled={!activeSemesterId}
+              >
+                <Plus size={16} /> Add Team Manually
+              </button>
+            </div>
+            <div className="space-y-6">
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">1. Teams + Students + Pimpro</p>
+                <div className="flex gap-3 mb-2">
+                  <button onClick={downloadTeamsTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
+                </div>
+                <label className={`cursor-pointer ${isImportingTeams ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
+                  {isImportingTeams ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload Teams File'}
+                  <input ref={teamsFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleTeamsFileUpload} disabled={isImportingTeams || !activeSemesterId} />
+                </label>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">2. SIAP PBL Data (Teams + Students + Links)</p>
+                <div className="flex gap-3 mb-2">
+                  <button onClick={downloadSiapPblTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
+                </div>
+                <label className={`cursor-pointer ${isImportingSiapPbl ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
+                  {isImportingSiapPbl ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload SIAP PBL File'}
+                  <input ref={siapPblFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleSiapPblFileUpload} disabled={isImportingSiapPbl || !activeSemesterId} />
+                </label>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">3. Reviewer Assignments</p>
+                <div className="flex gap-3 mb-2">
+                  <button onClick={downloadReviewersTemplate} className="text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2"><Download size={16} /> Template</button>
+                </div>
+                <label className={`cursor-pointer ${isImportingReviewers ? 'bg-gray-400' : 'bg-navy hover:bg-navy-light'} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-2`}>
+                  {isImportingReviewers ? <><Loader2 size={16} className="animate-spin" /> Importing...</> : 'Upload Reviewers File'}
+                  <input ref={reviewersFileRef} type="file" accept=".xlsx, .xls" className="hidden" onChange={handleReviewersFileUpload} disabled={isImportingReviewers || !activeSemesterId} />
+                </label>
+              </div>
+              {!activeSemesterId && <p className="text-xs text-red-500">Please set an active tahun ajaran first.</p>}
+            </div>
+          </div>
+
+          {/* Stats & Export */}
+          <div className="glass-panel antigravity-shadow p-6 rounded-xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="p-3 bg-green-500/10 rounded-lg text-green-600"><Users size={24} /></div>
+                <h2 className="text-xl font-semibold">Active Tahun Ajaran Stats</h2>
+              </div>
+              <p className="text-4xl font-bold mb-1">{totalTeams}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Total Teams for {semesters.find((s) => s.id === activeSemesterId)?.name || '...'}</p>
+            </div>
+            <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Export Data</h3>
+              <button onClick={exportGrades} disabled={isExporting || !activeSemesterId} className="w-full bg-sky hover:bg-sky-dark disabled:bg-gray-400 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Export Grades Report
+              </button>
+            </div>
+          </div>
         </div>
-      </section>
+
+        <section className="glass-panel antigravity-shadow rounded-xl overflow-hidden">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+            <h2 className="text-xl font-semibold">Reviewer Grading Progress</h2>
+            <div className="flex items-center gap-4">
+              <select
+                value={kelasFilter}
+                onChange={(e) => setKelasFilter(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm dark:bg-gray-700"
+              >
+                <option value="Semua">Semua Kelas</option>
+                <option value="Pagi">Kelas Pagi</option>
+                <option value="Malam">Kelas Malam</option>
+              </select>
+              {activeSemesterId && (
+                <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full whitespace-nowrap">
+                  Showing: {semesters.find((s) => s.id === activeSemesterId)?.name} — {semesters.find((s) => s.id === activeSemesterId)?.active_period}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative border-t border-gray-100 dark:border-gray-700 [mask-image:linear-gradient(to_right,transparent,black_20px,black_calc(100%-20px),transparent)]">
+            <table className="w-full text-left border-collapse min-w-[800px] pb-4">
+              <thead className="sticky top-0 z-10 glass-panel shadow-sm">
+                <tr>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <button onClick={() => setSortDirection(s => s === 'asc' ? 'desc' : 'asc')} className="flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                      Team <ArrowUpDown size={14} className="opacity-50" />
+                    </button>
+                  </th>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Pimpro (Manpro)</th>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Doc Progress</th>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Reviewers</th>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Students Graded</th>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Status</th>
+                  <th className="p-4 font-medium text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto text-sky" /></td></tr>
+                ) : progress.length === 0 ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-500">No data available for this tahun ajaran. Import teams and reviewer assignments first.</td></tr>
+                ) : (
+                  progress
+                    .filter((p) => {
+                      if (kelasFilter === 'Semua') return true;
+                      if (kelasFilter === 'Pagi') return p.team_kelas?.toLowerCase().includes('pagi');
+                      if (kelasFilter === 'Malam') return p.team_kelas?.toLowerCase().includes('malam');
+                      return true;
+                    })
+                    .sort((a, b) => {
+                      const cmp = (a.team_name || '').localeCompare(b.team_name || '');
+                      return sortDirection === 'asc' ? cmp : -cmp;
+                    })
+                    .map((p, idx) => {
+                      // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
+                      const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
+                      return (
+                        <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800/50 opacity-0 animate-fade-in-up" style={{ animationDelay: `${idx * 0.05}s` }}>
+                          <td className="p-4">
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{p.team_name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{p.team_code}</div>
+                          </td>
+                          <td className="p-4">
+                            <select
+                              value={p.pimpro_id || ''}
+                              onChange={(e) => handlePimproChange(p.team_id, e.target.value)}
+                              className="w-36 border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
+                            >
+                              <option value="">— none —</option>
+                              {lecturerOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-4 whitespace-nowrap text-sm text-slate-700">
+                            <button type="button" onClick={() => setSelectedDocsTeam(p)} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${p.completed_links === 6 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : p.completed_links > 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                              {p.completed_links}/6
+                            </button>
+                          </td>
+                          <td className="p-4 space-y-1">
+                            {slots.map((slot, i) => {
+                              const otherIds = new Set(slots.filter((_, j) => j !== i).map((s) => s?.lecturer_id).filter(Boolean));
+                              return (
+                                <select
+                                  key={i}
+                                  value={slot?.lecturer_id || ''}
+                                  onChange={(e) => handleReviewerChange(p.team_id, slot?.lecturer_id ?? null, e.target.value)}
+                                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
+                                >
+                                  <option value="">— reviewer {i + 1}: none —</option>
+                                  {lecturerOptions.filter((l) => !otherIds.has(l.id)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                </select>
+                              );
+                            })}
+                          </td>
+                          <td className="p-4">
+                            {p.reviewers.length === 0 ? (
+                              <span className="text-sm text-gray-500">—</span>
+                            ) : (
+                              <div className="space-y-1">
+                                {p.reviewers.map((r, idx) => {
+                                  const currentOrder = r.reviewer_order;
+                                  const orderLabel = currentOrder ? `R${currentOrder}` : '?';
+                                  const orderColors: Record<string, string> = {
+                                    R1: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+                                    R2: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+                                    R3: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+                                    '?': 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+                                  };
+                                  return (
+                                    <button key={r.lecturer_id} type="button"
+                                      onClick={() => setSelectedReviewerProgress({ teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })}
+                                      className="flex items-center gap-2 hover:opacity-80 transition-opacity w-full text-left p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                      <span className="text-sm font-medium w-12">{r.graded_students} / {p.total_students}</span>
+                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                                        <div className="h-full bg-sky" style={{ width: `${p.total_students > 0 ? (r.graded_students / p.total_students) * 100 : 0}%` }} />
+                                      </div>
+                                      {/* Reviewer order badge — static display */}
+                                      <span
+                                        title={`Export order: ${orderLabel}`}
+                                        className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded select-none ${orderColors[orderLabel]}`}>
+                                        {orderLabel}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            {p.reviewers.length === 0 ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">No Reviewer</span>
+                            ) : (
+                              <div className="space-y-1">
+                                {p.reviewers.map((r) => (
+                                  <span key={r.lecturer_id} className={`block px-3 py-1 rounded-full text-xs font-medium w-fit ${r.status === 'Completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                      r.status === 'In Progress' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                        'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                                    }`}>{r.lecturer_name}: {r.status}</span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4 space-y-2">
+                            <div className="space-y-1">
+                              {p.reviewers.map((r) => (
+                                <button key={r.lecturer_id} onClick={() => handleToggleLock(p.team_id, r.lecturer_id, r.status)} className={`text-xs hover:underline flex items-center gap-1 ${r.status === 'Completed' ? 'text-orange-600' : 'text-gray-500'}`}>
+                                  <Unlock size={14} /> {r.status === 'Completed' ? 'Unlock' : 'Lock'} {r.lecturer_name}
+                                </button>
+                              ))}
+                            </div>
+                            <div className={`flex gap-3 ${p.reviewers.length > 0 ? 'pt-2 border-t border-gray-100 dark:border-gray-700' : ''}`}>
+                              <button onClick={() => setEditingTeam(p)} className="text-xs text-sky hover:underline flex items-center gap-1"><Pencil size={14} /> Edit</button>
+                              <button onClick={() => handleDeleteTeam(p)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><Trash2 size={14} /> Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
       </div>
 
-    <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} />
+      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} />
 
-    {editingLecturer && (
-      <LecturerEditModal
-        lecturer={editingLecturer}
-        onClose={() => setEditingLecturer(null)}
-        onSaved={async () => { setLecturers(await listLecturerAccounts()); setEditingLecturer(null); }}
-      />
-    )}
+      {editingLecturer && (
+        <LecturerEditModal
+          lecturer={editingLecturer}
+          onClose={() => setEditingLecturer(null)}
+          onSaved={async () => { setLecturers(await listLecturerAccounts()); setEditingLecturer(null); }}
+        />
+      )}
 
-    {editingTeam && (
-      <TeamEditModal
-        team={editingTeam}
-        onClose={() => setEditingTeam(null)}
-        onSaved={async () => {
+      {editingTeam && (
+        <TeamEditModal
+          team={editingTeam}
+          onClose={() => setEditingTeam(null)}
+          onSaved={async () => {
+            if (activeSemesterId) {
+              setProgress(await getProgress(activeSemesterId));
+              setTotalTeams(await getTeamCount(activeSemesterId));
+            }
+          }}
+        />
+      )}
+
+      {selectedDocsTeam && (
+        <DocLinksModal team={selectedDocsTeam} onClose={() => setSelectedDocsTeam(null)} />
+      )}
+
+      {selectedReviewerProgress && (
+        <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
+      )}
+
+      <AddTeamModal
+        isOpen={isAddTeamModalOpen}
+        onClose={() => setIsAddTeamModalOpen(false)}
+        onSuccess={async () => {
+          setIsAddTeamModalOpen(false);
           if (activeSemesterId) {
             setProgress(await getProgress(activeSemesterId));
             setTotalTeams(await getTeamCount(activeSemesterId));
           }
         }}
+        academicYearId={activeSemesterId}
+        lecturers={lecturers}
       />
-    )}
-
-    {selectedDocsTeam && (
-      <DocLinksModal team={selectedDocsTeam} onClose={() => setSelectedDocsTeam(null)} />
-    )}
-
-    {selectedReviewerProgress && (
-      <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
-    )}
-
-    <AddTeamModal
-      isOpen={isAddTeamModalOpen}
-      onClose={() => setIsAddTeamModalOpen(false)}
-      onSuccess={async () => {
-        setIsAddTeamModalOpen(false);
-        if (activeSemesterId) {
-          setProgress(await getProgress(activeSemesterId));
-          setTotalTeams(await getTeamCount(activeSemesterId));
-        }
-      }}
-      academicYearId={activeSemesterId}
-      lecturers={lecturers}
-    />
     </>
   );
 }
@@ -931,7 +988,7 @@ function TeamEditModal({
   const [students, setStudents] = useState<{ id: string; nim: string; name: string; prodi?: string; semester?: string; kelas?: string; }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const [newNim, setNewNim] = useState('');
   const [newName, setNewName] = useState('');
   const [newProdi, setNewProdi] = useState('');
@@ -1002,13 +1059,13 @@ function TeamEditModal({
         </div>
 
         <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 mb-4 flex-shrink-0">
-          <button 
+          <button
             onClick={() => setActiveTab('members')}
             className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'members' ? 'border-b-2 border-sky text-sky' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
           >
             Team Members & Info
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('documents')}
             className={`pb-2 text-sm font-medium transition-colors ${activeTab === 'documents' ? 'border-b-2 border-sky text-sky' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
           >
@@ -1020,7 +1077,7 @@ function TeamEditModal({
           <>
             <div className="mb-4 flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Team Class:</label>
-              <select 
+              <select
                 value={teamKelas}
                 onChange={async (e) => {
                   const val = e.target.value;
@@ -1037,9 +1094,9 @@ function TeamEditModal({
                 <option value="Malam">Malam</option>
               </select>
             </div>
-            
+
             {error && <p className="text-sm text-red-500 mb-4 flex-shrink-0">{error}</p>}
-            
+
             <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 min-h-0">
               {loading ? (
                 <div className="py-4 text-center"><Loader2 className="animate-spin mx-auto text-sky" /></div>
@@ -1048,29 +1105,29 @@ function TeamEditModal({
               ) : (
                 students.map(s => (
                   <div key={s.id} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white/50 dark:bg-gray-800/50">
-                    <input 
-                      defaultValue={s.nim} 
+                    <input
+                      defaultValue={s.nim}
                       onBlur={(e) => { if (e.target.value !== s.nim) handleUpdateStudent(s.id, e.target.value, s.name, s.prodi || '', s.semester || '', s.kelas || '') }}
-                      className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
-                      placeholder="NIM" 
+                      className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky"
+                      placeholder="NIM"
                     />
-                    <input 
-                      defaultValue={s.name} 
+                    <input
+                      defaultValue={s.name}
                       onBlur={(e) => { if (e.target.value !== s.name) handleUpdateStudent(s.id, s.nim, e.target.value, s.prodi || '', s.semester || '', s.kelas || '') }}
-                      className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
-                      placeholder="Name" 
+                      className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky"
+                      placeholder="Name"
                     />
-                    <input 
-                      defaultValue={s.prodi || ''} 
+                    <input
+                      defaultValue={s.prodi || ''}
                       onBlur={(e) => { if (e.target.value !== (s.prodi || '')) handleUpdateStudent(s.id, s.nim, s.name, e.target.value, s.semester || '', s.kelas || '') }}
-                      className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
-                      placeholder="Prodi" 
+                      className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky"
+                      placeholder="Prodi"
                     />
-                    <input 
-                      defaultValue={s.semester || ''} 
+                    <input
+                      defaultValue={s.semester || ''}
                       onBlur={(e) => { if (e.target.value !== (s.semester || '')) handleUpdateStudent(s.id, s.nim, s.name, s.prodi || '', e.target.value, s.kelas || '') }}
-                      className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky" 
-                      placeholder="Semester" 
+                      className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-900/50 focus:ring-1 focus:ring-sky"
+                      placeholder="Semester"
                     />
                     <div className="md:col-span-3 flex gap-2 w-full">
                       <select
@@ -1094,25 +1151,25 @@ function TeamEditModal({
             <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-auto flex-shrink-0">
               <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Add New Student</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2 bg-sky/5 dark:bg-sky/10 p-3 rounded-lg border border-sky/10">
-                <input 
+                <input
                   value={newNim} onChange={e => setNewNim(e.target.value)}
-                  className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
-                  placeholder="NIM" 
+                  className="md:col-span-2 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky"
+                  placeholder="NIM"
                 />
-                <input 
+                <input
                   value={newName} onChange={e => setNewName(e.target.value)}
-                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
-                  placeholder="Name" 
+                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky"
+                  placeholder="Name"
                 />
-                <input 
+                <input
                   value={newProdi} onChange={e => setNewProdi(e.target.value)}
-                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
-                  placeholder="Prodi" 
+                  className="md:col-span-3 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky"
+                  placeholder="Prodi"
                 />
-                <input 
+                <input
                   value={newSemester} onChange={e => setNewSemester(e.target.value)}
-                  className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky" 
-                  placeholder="Semester" 
+                  className="md:col-span-1 w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-800 focus:ring-1 focus:ring-sky"
+                  placeholder="Semester"
                 />
                 <div className="md:col-span-3 flex gap-2 w-full">
                   <select
@@ -1123,7 +1180,7 @@ function TeamEditModal({
                     <option value="Pagi">Pagi</option>
                     <option value="Malam">Malam</option>
                   </select>
-                  <button 
+                  <button
                     onClick={handleAddStudent} disabled={adding}
                     className="bg-sky hover:bg-sky-dark text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0 transition-colors"
                   >
@@ -1158,7 +1215,7 @@ function TeamEditModal({
                 </div>
               ))}
             </div>
-            
+
             <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4 flex justify-end">
               <button
                 onClick={async () => {
