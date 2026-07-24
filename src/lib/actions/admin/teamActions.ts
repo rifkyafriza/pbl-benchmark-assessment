@@ -294,3 +294,46 @@ export async function updateTeamLinks(
   revalidatePath('/admin');
 }
 
+const reviewerOrderSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.null()]);
+
+/** Set or clear the reviewer order (1|2|3|null) for a reviewer on a team. */
+export async function setReviewerOrder(
+  teamId: string,
+  lecturerId: string,
+  order: 1 | 2 | 3 | null,
+): Promise<void> {
+  await requireRole('admin');
+  const validTeamId = idSchema.parse(teamId);
+  const validLecturerId = idSchema.parse(lecturerId);
+  const validOrder = reviewerOrderSchema.parse(order);
+
+  const { error } = await supabaseAdmin
+    .from('team_lecturers')
+    .update({ reviewer_order: validOrder })
+    .eq('team_id', validTeamId)
+    .eq('lecturer_id', validLecturerId)
+    .eq('role', 'reviewer');
+
+  if (error) throw new Error(error.message);
+  revalidatePath('/admin');
+}
+
+/** Fetch reviewers for a team with their current order, sorted by reviewer_order. */
+export async function getTeamReviewers(teamId: string) {
+  await requireRole('admin');
+  const validId = idSchema.parse(teamId);
+
+  const { data, error } = await supabaseAdmin
+    .from('team_lecturers')
+    .select('lecturer_id, reviewer_order, users(name)')
+    .eq('team_id', validId)
+    .eq('role', 'reviewer')
+    .order('reviewer_order', { ascending: true, nullsFirst: false });
+
+  if (error) throw new Error(error.message);
+  return (data || []).map((r: any) => ({
+    lecturerId: r.lecturer_id,
+    name: r.users?.name || 'Unknown',
+    order: r.reviewer_order as 1 | 2 | 3 | null,
+  }));
+}

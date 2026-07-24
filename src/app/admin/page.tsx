@@ -10,7 +10,7 @@ import {
   importTeamsTemplate, importSiapPblTemplate, importReviewersTemplate, exportGradesData,
 } from '@/lib/adminActions';
 import {
-  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass, updateTeamLinks,
+  deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass, updateTeamLinks, setReviewerOrder,
 } from '@/lib/actions/admin/teamActions';
 import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -355,12 +355,13 @@ export default function AdminDashboard() {
     if (!activeSemesterId) return toast.error('Select an active tahun ajaran first');
     setIsExporting(true);
     try {
-      const rows = await exportGradesData(activeSemesterId);
-      if (rows.length === 0) return toast.info('No data found for this tahun ajaran');
-      const ws = XLSX.utils.json_to_sheet(rows);
+      const { ats, aas } = await exportGradesData(activeSemesterId);
+      if (ats.length <= 1 && aas.length <= 1) return toast.info('No data found for this tahun ajaran');
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Grades');
-      XLSX.writeFile(wb, 'PBL_Grades_Export.xlsx');
+      if (ats.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ats), 'ATS');
+      if (aas.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aas), 'AAS');
+      XLSX.writeFile(wb, 'Form_Assesment_Benchmark.xlsx');
+      toast.success('Export complete!');
     } catch (err: any) {
       toast.error('Error exporting grades: ' + err.message);
     } finally { setIsExporting(false); }
@@ -756,14 +757,42 @@ export default function AdminDashboard() {
                           <span className="text-sm text-gray-500">—</span>
                         ) : (
                           <div className="space-y-1">
-                            {p.reviewers.map((r, idx) => (
-                              <button key={r.lecturer_id} type="button" onClick={() => setSelectedReviewerProgress({ teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })} className="flex items-center gap-2 hover:opacity-80 transition-opacity w-full text-left p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
-                                <span className="text-sm font-medium w-12">{r.graded_students} / {p.total_students}</span>
-                                <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
-                                  <div className="h-full bg-sky" style={{ width: `${p.total_students > 0 ? (r.graded_students / p.total_students) * 100 : 0}%` }} />
-                                </div>
-                              </button>
-                            ))}
+                            {p.reviewers.map((r, idx) => {
+                              const currentOrder = (r as any).reviewer_order as 1 | 2 | 3 | null;
+                              const orderLabel = currentOrder ? `R${currentOrder}` : '?';
+                              const orderColors: Record<string, string> = {
+                                R1: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+                                R2: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+                                R3: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+                                '?': 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+                              };
+                              return (
+                                <button key={r.lecturer_id} type="button"
+                                  onClick={() => setSelectedReviewerProgress({ teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })}
+                                  className="flex items-center gap-2 hover:opacity-80 transition-opacity w-full text-left p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                  <span className="text-sm font-medium w-12">{r.graded_students} / {p.total_students}</span>
+                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                                    <div className="h-full bg-sky" style={{ width: `${p.total_students > 0 ? (r.graded_students / p.total_students) * 100 : 0}%` }} />
+                                  </div>
+                                  {/* Reviewer order badge — click to cycle R1 → R2 → R3 → null */}
+                                  <span
+                                    role="button"
+                                    title={`Export order: ${orderLabel}. Click to change.`}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const next = currentOrder === 1 ? 2 : currentOrder === 2 ? 3 : currentOrder === 3 ? null : 1;
+                                      try {
+                                        await setReviewerOrder(p.team_id, r.lecturer_id, next as 1 | 2 | 3 | null);
+                                        toast.success(`${r.lecturer_name} set to ${next ? `R${next}` : 'unset'}`);
+                                        setProgress(await getProgress(activeSemesterId!));
+                                      } catch { toast.error('Failed to update reviewer order'); }
+                                    }}
+                                    className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer select-none hover:opacity-75 transition-opacity ${orderColors[orderLabel]}`}>
+                                    {orderLabel}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </td>

@@ -371,64 +371,163 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
   return { success: true, rowsProcessed: rows.length, assignmentsApplied: toApply.length };
 }
 
-export async function exportGradesData(academicYearId: string) {
+// ─── Score ↔ Level helpers ────────────────────────────────────────────────────
+
+const SCORE_TO_LEVEL: Record<number, number> = { 0: 0, 47: 1, 62: 2, 77: 3, 90: 4, 100: 5 };
+
+function scoreToLevelStr(score: number | null | undefined): string {
+  if (score === null || score === undefined) return 'Level 0';
+  const level = SCORE_TO_LEVEL[score];
+  return level !== undefined ? `Level ${level}` : 'Level 0';
+}
+
+function scoreToNum(score: number | null | undefined): number {
+  return score ?? 0;
+}
+
+/** Average non-null values only. Falls back to 0 if none supplied. */
+function smartAvg(...values: (number | string | null | undefined)[]): number {
+  const valid = values.filter((v): v is number => typeof v === 'number');
+  if (valid.length === 0) return 0;
+  return valid.reduce((s, v) => s + v, 0) / valid.length;
+}
+
+// ─── Header (A–Z) ─────────────────────────────────────────────────────────────
+
+const EXPORT_HEADER: (string | number)[] = [
+  'Nama',                 // A
+  'NIM',                  // B
+  'Nama Mahasiswa',       // C
+  'Level b7 R1', 'Level b7 R2', 'Level b7 R3',   // D E F
+  'Level c1 R1', 'Level c1 R2', 'Level c1 R3',   // G H I
+  'Level c7 R1', 'Level c7 R2', 'Level c7 R3',   // J K L
+  'Nilai b7 R1', 'Nilai b7 R2', 'Nilai b7 R3', 'Avg b7',   // M N O P
+  'Nilai c1 R1', 'Nilai c1 R2', 'Nilai c1 R3', 'Avg c1',   // Q R S T
+  'Nilai c7 R1', 'Nilai c7 R2', 'Nilai c7 R3', 'Avg c7',   // U V W X
+  'PR (b7)',              // Y
+  'PP ((c1+c7)/2)',       // Z
+];
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns grade data as two arrays of rows (ATS and AAS) matching the
+ * reference Benchmark Assessment template. Each row array is A–Z (26 cols)
+ * ready for XLSX.utils.aoa_to_sheet().
+ *
+ * Reviewer slots that have no grade data default to Level 0 / 0.
+ * The 3rd reviewer column (F/I/L/O/S/W) is empty string when only 2
+ * reviewers graded; averages divide by the actual reviewer count.
+ */
+export async function exportGradesData(academicYearId: string): Promise<{
+  ats: (string | number)[][];
+  aas: (string | number)[][];
+}> {
   await requireRole('admin');
 
-  const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('id', academicYearId).single();
-  const activePeriod = semester?.active_period || 'ATS';
+  const { data: teams } = await supabaseAdmin
+    .from('teams')
+    .select('id, name, team_code')
+    .eq('academic_year_id', academicYearId)
+    .eq('is_deleted', false)
+    .order('team_code');
 
-  const { data: teams } = await supabaseAdmin.from('teams').select('id, name, team_code').eq('academic_year_id', academicYearId).eq('is_deleted', false);
-  if (!teams || teams.length === 0) return [];
+  if (!teams || teams.length === 0) return { ats: [], aas: [] };
   const teamIds = teams.map((t) => t.id);
 
-  const { data: teamStudents } = await supabaseAdmin.from('team_students').select('team_id, student_id, students(name, nim)').in('team_id', teamIds);
-  const { data: grades } = await supabaseAdmin.from('grades').select('*').in('team_id', teamIds).eq('period', activePeriod);
-  const lecturerIds = Array.from(new Set((grades || []).map((g) => g.lecturer_id).filter(Boolean)));
-  const { data: lecturers } = lecturerIds.length
-    ? await supabaseAdmin.from('users').select('id, name').in('id', lecturerIds)
-    : { data: [] as any[] };
+  const [
+    { data: teamStudents },
+    { data: grades },
+    { data: reviewerLinks },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('team_students')
+      .select('team_id, student_id, students(name, nim)')
+      .in('team_id', teamIds),
+    supabaseAdmin
+      .from('grades')
+      .select('team_id, student_id, lecturer_id, period, implementation_score, document_score, english_score')
+      .in('team_id', teamIds),
+    supabaseAdmin
+      .from('team_lecturers')
+      .select('team_id, lecturer_id, reviewer_order')
+      .eq('role', 'reviewer')
+      .in('team_id', teamIds),
+  ]);
 
-  const rows: any[] = [];
-  for (const ts of teamStudents || []) {
-    const team = teams.find((t) => t.id === ts.team_id);
-    const student = ts.students as any;
-    const studentGrades = (grades || []).filter((g) => g.team_id === ts.team_id && g.student_id === ts.student_id);
-
-    if (studentGrades.length === 0) {
-      rows.push({
-        'Team Code': team?.team_code || '',
-        'Team Name': team?.name || '',
-        'Student NIM': student?.nim || '',
-        'Student Name': student?.name || '',
-        Period: activePeriod,
-        Reviewer: '',
-        'Implementation Score': '',
-        'Document Score': '',
-        'English Score': '',
-        Comment: '',
-        Status: 'Not Graded',
-      });
-      continue;
-    }
-
-    for (const g of studentGrades) {
-      const lecturer = lecturers?.find((l) => l.id === g.lecturer_id);
-      rows.push({
-        'Team Code': team?.team_code || '',
-        'Team Name': team?.name || '',
-        'Student NIM': student?.nim || '',
-        'Student Name': student?.name || '',
-        Period: g.period || 'ATS',
-        Reviewer: lecturer?.name || 'Unknown',
-        'Implementation Score': g.implementation_score ?? '',
-        'Document Score': g.document_score ?? '',
-        'English Score': g.english_score ?? '',
-        Comment: g.comment || '',
-        Status: g.is_locked ? 'Locked' : 'Draft',
-      });
-    }
+  // reviewer_order map: "teamId_lecturerId" → order number
+  const reviewerOrderMap = new Map<string, number>();
+  for (const rl of reviewerLinks || []) {
+    reviewerOrderMap.set(`${rl.team_id}_${rl.lecturer_id}`, rl.reviewer_order ?? 99);
   }
-  return rows;
+
+  function buildRows(period: 'ATS' | 'AAS'): (string | number)[][] {
+    const periodGrades = (grades || []).filter((g) => g.period === period);
+    const rows: (string | number)[][] = [EXPORT_HEADER];
+
+    for (const ts of (teamStudents || [])) {
+      const student = ts.students as any;
+      const nim = student?.nim || '';
+      const name = (student?.name || '').trim();
+
+      // All grades for this student this period, sorted by reviewer_order then lecturer_id
+      const sg = periodGrades
+        .filter((g) => g.team_id === ts.team_id && g.student_id === ts.student_id)
+        .sort((a, b) => {
+          const oa = reviewerOrderMap.get(`${a.team_id}_${a.lecturer_id}`) ?? 99;
+          const ob = reviewerOrderMap.get(`${b.team_id}_${b.lecturer_id}`) ?? 99;
+          return oa !== ob ? oa - ob : (a.lecturer_id || '').localeCompare(b.lecturer_id || '');
+        });
+
+      const g1 = sg[0] ?? null;
+      const g2 = sg[1] ?? null;
+      const g3 = sg[2] ?? null;
+
+      // Level strings — always at least Level 0 for R1/R2; R3 blank if absent
+      const levB7R1 = scoreToLevelStr(g1?.implementation_score);
+      const levB7R2 = scoreToLevelStr(g2?.implementation_score);
+      const levB7R3 = g3 ? scoreToLevelStr(g3.implementation_score) : '';
+      const levC1R1 = scoreToLevelStr(g1?.document_score);
+      const levC1R2 = scoreToLevelStr(g2?.document_score);
+      const levC1R3 = g3 ? scoreToLevelStr(g3.document_score) : '';
+      const levC7R1 = scoreToLevelStr(g1?.english_score);
+      const levC7R2 = scoreToLevelStr(g2?.english_score);
+      const levC7R3 = g3 ? scoreToLevelStr(g3.english_score) : '';
+
+      // Numeric scores
+      const nB7R1 = scoreToNum(g1?.implementation_score);
+      const nB7R2 = scoreToNum(g2?.implementation_score);
+      const nB7R3 = g3 ? scoreToNum(g3.implementation_score) : '';
+      const nC1R1 = scoreToNum(g1?.document_score);
+      const nC1R2 = scoreToNum(g2?.document_score);
+      const nC1R3 = g3 ? scoreToNum(g3.document_score) : '';
+      const nC7R1 = scoreToNum(g1?.english_score);
+      const nC7R2 = scoreToNum(g2?.english_score);
+      const nC7R3 = g3 ? scoreToNum(g3.english_score) : '';
+
+      // Averages divide by actual reviewer count
+      const avgB7 = g3 ? smartAvg(nB7R1, nB7R2, nB7R3) : smartAvg(nB7R1, nB7R2);
+      const avgC1 = g3 ? smartAvg(nC1R1, nC1R2, nC1R3) : smartAvg(nC1R1, nC1R2);
+      const avgC7 = g3 ? smartAvg(nC7R1, nC7R2, nC7R3) : smartAvg(nC7R1, nC7R2);
+      const pp   = smartAvg(avgC1, avgC7);
+
+      rows.push([
+        `b7. Implementation [${nim}\t${name}]`, nim, name,  // A B C
+        levB7R1, levB7R2, levB7R3,                          // D E F
+        levC1R1, levC1R2, levC1R3,                          // G H I
+        levC7R1, levC7R2, levC7R3,                          // J K L
+        nB7R1,  nB7R2,  nB7R3,  avgB7,                     // M N O P
+        nC1R1,  nC1R2,  nC1R3,  avgC1,                     // Q R S T
+        nC7R1,  nC7R2,  nC7R3,  avgC7,                     // U V W X
+        avgB7,                                               // Y  PR(b7)
+        pp,                                                  // Z  PP
+      ]);
+    }
+
+    return rows;
+  }
+
+  return { ats: buildRows('ATS'), aas: buildRows('AAS') };
 }
 
 

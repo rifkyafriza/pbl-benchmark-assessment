@@ -14,7 +14,7 @@ export async function getProgress(academicYearId: string) {
     supabaseAdmin.from('teams').select(`
       id, name, team_code, kelas,
       rpp, laporan_akhir, poster, manual_book, bast, video_demo,
-      team_lecturers (team_id, lecturer_id, role, users(name)),
+      team_lecturers (team_id, lecturer_id, role, reviewer_order, users(name)),
       team_students (team_id, student_id, students(kelas, nim, name)),
       grades (team_id, student_id, lecturer_id, is_locked, period, implementation_score, document_score, english_score)
     `).eq('academic_year_id', academicYearId).eq('is_deleted', false).limit(500)
@@ -32,7 +32,7 @@ export async function getProgress(academicYearId: string) {
            pimproId = l.lecturer_id;
            pimproName = l.users?.name || 'Unknown';
        }
-       if (l.role === 'reviewer') reviewersForTeam.push({ lecturer_id: l.lecturer_id, lecturer_name: l.users?.name || 'Unknown' });
+       if (l.role === 'reviewer') reviewersForTeam.push({ lecturer_id: l.lecturer_id, lecturer_name: l.users?.name || 'Unknown', reviewer_order: l.reviewer_order ?? null });
     });
 
     const totalStudents = (t.team_students || []).length;
@@ -65,6 +65,7 @@ export async function getProgress(academicYearId: string) {
       return {
         lecturer_id: r.lecturer_id,
         lecturer_name: r.lecturer_name,
+        reviewer_order: r.reviewer_order as 1 | 2 | 3 | null,
         status,
         finalized_students: finalized,
         graded_students,
