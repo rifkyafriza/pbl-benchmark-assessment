@@ -6,7 +6,7 @@ import {
   listSemesters, addSemester, deleteSemester, setActiveSemester, setActivePeriod,
   listLecturerAccounts, createLecturerAccount,
   updateLecturerAccount, getLecturerGradeCount, deleteLecturerAccount,
-  getProgress, getTeamCount, toggleTeamReviewerLock, listAllLecturers, setTeamAssignment, setTeamReviewer,
+  getProgress, getTeamCount, toggleTeamReviewerLock, listAllLecturers, setTeamAssignment, setTeamReviewer, overrideStudentGrade,
   importTeamsTemplate, importSiapPblTemplate, importReviewersTemplate, exportGradesData,
 } from '@/lib/adminActions';
 import {
@@ -28,7 +28,7 @@ function ensureAbsoluteUrl(url: string | null | undefined): string {
 }
 
 type Semester = { id: string; name: string; is_active: boolean; active_period: 'ATS' | 'AAS' };
-type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string; reviewer_order: 1 | 2 | 3 | null; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] };
+type ReviewerProgress = { lecturer_id: string; lecturer_name: string; graded_students: number; finalized_students: number; status: string; reviewer_order: 1 | 2 | 3 | null; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number; comment?: string | null; }[] };
 type TeamProgress = {
   team_id: string; team_name: string; team_code: string; academic_year_id: string;
   pimpro_id: string | null; pimpro_name: string | null; team_kelas: string | null;
@@ -58,7 +58,7 @@ export default function AdminDashboard() {
   const [editingLecturer, setEditingLecturer] = useState<LecturerAccount | null>(null);
   const [editingTeam, setEditingTeam] = useState<TeamProgress | null>(null);
   const [selectedDocsTeam, setSelectedDocsTeam] = useState<TeamProgress | null>(null);
-  const [selectedReviewerProgress, setSelectedReviewerProgress] = useState<{ teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] } | null>(null);
+  const [selectedReviewerProgress, setSelectedReviewerProgress] = useState<{ teamId?: string; lecturerId?: string; teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number; comment?: string | null }[] } | null>(null);
   const [kelasFilter, setKelasFilter] = useState<string>('Semua');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -839,7 +839,7 @@ export default function AdminDashboard() {
                                   };
                                   return (
                                     <button key={r.lecturer_id} type="button"
-                                      onClick={() => setSelectedReviewerProgress({ teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })}
+                                      onClick={() => setSelectedReviewerProgress({ teamId: p.team_id, lecturerId: r.lecturer_id, teamName: p.team_name, reviewerName: r.lecturer_name, reviewerIndex: idx + 1, students: r.students })}
                                       className="flex items-center gap-2 hover:opacity-80 transition-opacity w-full text-left p-1 -ml-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                                       <span className="text-sm font-medium w-12">{r.graded_students} / {p.total_students}</span>
                                       <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
@@ -923,7 +923,15 @@ export default function AdminDashboard() {
       )}
 
       {selectedReviewerProgress && (
-        <ReviewerProgressModal data={selectedReviewerProgress} onClose={() => setSelectedReviewerProgress(null)} />
+        <ReviewerProgressModal 
+          data={selectedReviewerProgress} 
+          onClose={() => setSelectedReviewerProgress(null)} 
+          onSaved={async () => {
+            if (activeSemesterId) {
+              setProgress(await getProgress(activeSemesterId));
+            }
+          }}
+        />
       )}
 
       <AddTeamModal
@@ -1297,7 +1305,55 @@ function DocLinksModal({ team, onClose }: { team: TeamProgress; onClose: () => v
   );
 }
 
-function ReviewerProgressModal({ data, onClose }: { data: { teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number }[] }; onClose: () => void }) {
+function ReviewerProgressModal({ data, onClose, onSaved }: { data: { teamId?: string; lecturerId?: string; teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number; comment?: string | null }[] }; onClose: () => void; onSaved?: () => void }) {
+  const toast = useToast();
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editScores, setEditScores] = useState({ implementation_score: 0, document_score: 0, english_score: 0 });
+  const [saving, setSaving] = useState(false);
+
+  // Derive teamId and lecturerId from the parent component if possible, or we need to pass them down.
+  // Wait, data doesn't currently include teamId and lecturerId. I need to make sure they are passed.
+  // Actually, I can check if they are passed. If not, the override feature won't work.
+  // Let me just modify the modal UI and I'll add teamId and lecturerId to the data passed in page.tsx where it sets selectedReviewerProgress.
+
+  const handleEditClick = (student: any) => {
+    setEditingStudentId(student.id);
+    setEditScores({
+      implementation_score: student.implementation_score || 0,
+      document_score: student.document_score || 0,
+      english_score: student.english_score || 0,
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStudentId(null);
+  };
+
+  const handleSaveEdit = async (studentId: string) => {
+    if (!data.teamId || !data.lecturerId) {
+      toast.error('Missing team or reviewer context to override grade.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await overrideStudentGrade(data.teamId, studentId, data.lecturerId, editScores);
+      toast.success('Grade overridden successfully!');
+      setEditingStudentId(null);
+      if (onSaved) onSaved(); // refresh data
+      // Optimistically update local data to reflect immediately without closing modal
+      const student = data.students.find(s => s.id === studentId);
+      if (student) {
+        student.implementation_score = editScores.implementation_score;
+        student.document_score = editScores.document_score;
+        student.english_score = editScores.english_score;
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
       <div className="glass-panel antigravity-shadow rounded-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-fade-in-up">
@@ -1316,27 +1372,74 @@ function ReviewerProgressModal({ data, onClose }: { data: { teamName: string; re
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate" title={student.name}>{student.name}</div>
                       <div className="text-xs text-gray-500">{student.nim}</div>
-                      {student.is_graded && (
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] sm:text-xs">
-                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
-                            <span className="block text-gray-400">Impl.</span>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">{student.implementation_score ?? '-'}</span>
+                      
+                      {editingStudentId === student.id ? (
+                        <div className="mt-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-sm">
+                          <p className="text-xs font-semibold mb-2 text-gray-700 dark:text-gray-300">Override Grade (1-5)</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Impl.</label>
+                              <select value={editScores.implementation_score} onChange={(e) => setEditScores({...editScores, implementation_score: parseInt(e.target.value)})} className="w-full text-xs p-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                                {[0,1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Doc.</label>
+                              <select value={editScores.document_score} onChange={(e) => setEditScores({...editScores, document_score: parseInt(e.target.value)})} className="w-full text-xs p-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                                {[0,1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Eng.</label>
+                              <select value={editScores.english_score} onChange={(e) => setEditScores({...editScores, english_score: parseInt(e.target.value)})} className="w-full text-xs p-1 rounded border border-gray-300 dark:border-gray-600 dark:bg-gray-700">
+                                {[0,1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            </div>
                           </div>
-                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
-                            <span className="block text-gray-400">Doc.</span>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">{student.document_score ?? '-'}</span>
-                          </div>
-                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
-                            <span className="block text-gray-400">Eng.</span>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">{student.english_score ?? '-'}</span>
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={handleCancelEdit} disabled={saving} className="flex-1 text-xs border border-gray-300 dark:border-gray-600 rounded py-1 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors">Cancel</button>
+                            <button onClick={() => handleSaveEdit(student.id)} disabled={saving} className="flex-1 text-xs bg-sky text-white rounded py-1 hover:bg-sky-dark disabled:opacity-50 transition-colors">{saving ? 'Saving...' : 'Save'}</button>
                           </div>
                         </div>
+                      ) : (
+                        student.is_graded && (
+                          <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] sm:text-xs">
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
+                              <span className="block text-gray-400">Impl.</span>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{student.implementation_score ?? '-'}</span>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
+                              <span className="block text-gray-400">Doc.</span>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{student.document_score ?? '-'}</span>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1 text-center">
+                              <span className="block text-gray-400">Eng.</span>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">{student.english_score ?? '-'}</span>
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
-                    <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${student.is_locked ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : student.is_graded ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-                      {student.is_locked ? 'Finalized' : student.is_graded ? 'Draft Saved' : 'Ungraded'}
-                    </span>
+                    
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${student.is_locked ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : student.is_graded ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                        {student.is_locked ? 'Finalized' : student.is_graded ? 'Draft Saved' : 'Ungraded'}
+                      </span>
+                      {student.is_graded && editingStudentId !== student.id && (
+                        <button onClick={() => handleEditClick(student)} className="text-[10px] text-sky hover:underline flex items-center gap-1">
+                          <Pencil size={10} /> Override Grade
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  
+                  {student.comment && editingStudentId !== student.id && (
+                    <div className="mt-3 p-3 bg-white/60 dark:bg-gray-800/60 border border-gray-200/50 dark:border-gray-700/50 rounded-lg text-sm text-gray-600 dark:text-gray-300 italic relative">
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky/30 rounded-l-lg"></div>
+                      <span className="font-semibold text-xs not-italic text-gray-400 block mb-1">Reviewer Note:</span>
+                      {student.comment}
+                    </div>
+                  )}
                 </div>
               ))
             )}

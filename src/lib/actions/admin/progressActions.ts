@@ -16,7 +16,7 @@ export async function getProgress(academicYearId: string) {
       rpp, laporan_akhir, poster, manual_book, bast, video_demo,
       team_lecturers (team_id, lecturer_id, role, reviewer_order, users(name)),
       team_students (team_id, student_id, students(kelas, nim, name)),
-      grades (team_id, student_id, lecturer_id, is_locked, period, implementation_score, document_score, english_score)
+      grades (team_id, student_id, lecturer_id, is_locked, period, implementation_score, document_score, english_score, comment)
     `).eq('academic_year_id', academicYearId).eq('is_deleted', false).limit(500)
   ]);
   const period = semester?.active_period || 'ATS';
@@ -56,6 +56,7 @@ export async function getProgress(academicYearId: string) {
           implementation_score: grade?.implementation_score,
           document_score: grade?.document_score,
           english_score: grade?.english_score,
+          comment: grade?.comment,
           is_completed_grading: !!hasScore
         };
       });
@@ -103,4 +104,32 @@ export async function getProgress(academicYearId: string) {
       }
     };
   }).sort((a: any, b: any) => (a.team_name || '').localeCompare(b.team_name || ''));
+}
+
+export async function overrideStudentGrade(
+  teamId: string,
+  studentId: string,
+  lecturerId: string,
+  scores: { implementation_score: number; document_score: number; english_score: number }
+) {
+  await requireRole('admin');
+
+  const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('is_active', true).maybeSingle();
+  const period = semester?.active_period || 'ATS';
+
+  const { error } = await supabaseAdmin
+    .from('grades')
+    .update({
+      implementation_score: scores.implementation_score,
+      document_score: scores.document_score,
+      english_score: scores.english_score,
+      updated_at: new Date().toISOString()
+    })
+    .eq('team_id', teamId)
+    .eq('student_id', studentId)
+    .eq('lecturer_id', lecturerId)
+    .eq('period', period);
+
+  if (error) throw new Error(error.message);
+  revalidatePath('/admin');
 }
