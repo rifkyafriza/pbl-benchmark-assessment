@@ -110,11 +110,11 @@ export async function getTeamStudents(teamId: string) {
   if (error) throw new Error(error.message);
   return (teamStudents || []).map((ts: any) => ({
     id: ts.student_id,
-    nim: ts.students.nim,
-    name: ts.students.name,
-    prodi: ts.students.prodi,
-    semester: ts.students.semester,
-    kelas: ts.students.kelas,
+    nim: ts.students?.nim || '',
+    name: ts.students?.name || 'Unknown',
+    prodi: ts.students?.prodi || null,
+    semester: ts.students?.semester || null,
+    kelas: ts.students?.kelas || null,
   }));
 }
 

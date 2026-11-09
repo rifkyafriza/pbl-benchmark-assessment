@@ -117,18 +117,22 @@ export async function overrideStudentGrade(
   const { data: semester } = await supabaseAdmin.from('academic_years').select('active_period').eq('is_active', true).maybeSingle();
   const period = semester?.active_period || 'ATS';
 
+  const now = new Date().toISOString();
   const { error } = await supabaseAdmin
     .from('grades')
-    .update({
-      implementation_score: scores.implementation_score,
-      document_score: scores.document_score,
-      english_score: scores.english_score,
-      updated_at: new Date().toISOString()
-    })
-    .eq('team_id', teamId)
-    .eq('student_id', studentId)
-    .eq('lecturer_id', lecturerId)
-    .eq('period', period);
+    .upsert(
+      {
+        team_id: teamId,
+        student_id: studentId,
+        lecturer_id: lecturerId,
+        period,
+        implementation_score: scores.implementation_score,
+        document_score: scores.document_score,
+        english_score: scores.english_score,
+        updated_at: now,
+      },
+      { onConflict: 'student_id,team_id,lecturer_id,period' }
+    );
 
   if (error) throw new Error(error.message);
   revalidatePath('/admin');

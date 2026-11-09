@@ -1,12 +1,12 @@
-# Task Tracking: Fix Active Semester Selection Error
+# Task Tracking: System Critical Fixes Plan
 
-- [x] Investigate root cause of `Error setting active semester` on Admin Dashboard
-- [x] Identify underlying PostgreSQL `safeupdate` error (`code: 21000: UPDATE requires a WHERE clause`)
-- [x] Formulate solution options and write implementation plan artifact
-- [x] Obtain user approval (User selected Option A: local fix first, verify locally before push)
-- [x] Implement Option A in `src/lib/actions/admin/semesterActions.ts` (direct safe updates with explicit WHERE clauses)
-- [x] Add unit tests in `src/__tests__/semesterActions.test.ts`
-- [x] Run test suite (`npm test`) locally and verify (all 19 tests pass)
-- [x] Verify build locally (`npm run build` - successful)
-- [x] User review and approval to push to git
-- [x] Push changes to remote repository
+- [x] Selesaikan perbaikan dan push `setActiveSemester`
+- [x] Audit potensi bug dan evaluasi skala data live (71 tim, 380 mahasiswa, 686+ nilai)
+- [x] Buat dokumen perencanaan implementasi (`system_critical_fixes_plan.md`)
+- [x] Dapatkan persetujuan pengguna untuk rencana implementasi
+- [x] Implementasikan perbaikan Group 1 (Export 1000 limit, Reviewer import constraint, Admin override upsert, Grade lock check)
+- [x] Implementasikan perbaikan Group 2 (SIAP PBL dedup, Null safety getTeamStudents, Semester delete auto-fallback)
+- [x] Tambahkan/perbarui unit tests di `src/__tests__/` (26/26 tests passing)
+- [x] Jalankan `npm test` dan `npm run build` lokal (Build sukses)
+- [x] Konfirmasi pengguna sebelum git commit & push
+- [x] Push ke branch origin/main

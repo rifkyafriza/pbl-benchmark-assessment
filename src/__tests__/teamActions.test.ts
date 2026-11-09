@@ -1,4 +1,4 @@
-import { setTeamAssignment, addStudentToTeam, updateStudent } from '@/lib/actions/admin/teamActions';
+import { setTeamAssignment, addStudentToTeam, updateStudent, getTeamStudents } from '@/lib/actions/admin/teamActions';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Mock Next.js cache revalidation
@@ -65,6 +65,28 @@ describe('Team Actions', () => {
   describe('updateStudent', () => {
     it('rejects invalid UUID for studentId', async () => {
       await expect(updateStudent('invalid', '123456789', 'John Doe')).rejects.toThrow(/Invalid ID format/);
+    });
+  });
+
+  describe('getTeamStudents', () => {
+    it('safely handles null student relations without throwing', async () => {
+      const chain: any = supabaseAdmin.from('team_students');
+      chain.then.mockImplementationOnce((resolve: any) =>
+        resolve({
+          data: [
+            { student_id: 's-1', students: null },
+            { student_id: 's-2', students: { nim: '12345', name: 'Alice', prodi: 'IF', semester: '5', kelas: 'A' } },
+          ],
+          error: null,
+        })
+      );
+
+      const students = await getTeamStudents('123e4567-e89b-12d3-a456-426614174000');
+      expect(students).toHaveLength(2);
+      expect(students[0].name).toBe('Unknown');
+      expect(students[0].nim).toBe('');
+      expect(students[1].name).toBe('Alice');
+      expect(students[1].nim).toBe('12345');
     });
   });
 });

@@ -1,4 +1,4 @@
-import { addSemester, listSemesters, setActiveSemester } from '@/lib/actions/admin/semesterActions';
+import { addSemester, listSemesters, setActiveSemester, deleteSemester } from '@/lib/actions/admin/semesterActions';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { revalidatePath } from 'next/cache';
 
@@ -12,13 +12,16 @@ jest.mock('@/lib/auth', () => ({
   requireRole: jest.fn().mockResolvedValue({ id: 'admin1', role: 'admin' }),
 }));
 
-// Shared mock references so assertions can inspect them after action calls.
+// Shared mock references
 const mockInsert = jest.fn().mockResolvedValue({ error: null });
-const mockOrder = jest.fn().mockResolvedValue({ data: [{ id: '1', name: 'Semester 1' }] });
+const mockOrder = jest.fn();
+const mockLimit = jest.fn();
 const mockUpdate = jest.fn();
+const mockDelete = jest.fn();
 const mockEq = jest.fn();
 const mockNeq = jest.fn();
-let queryResult = { data: [] as any[], error: null as any };
+const mockMaybeSingle = jest.fn();
+let queryResult: { data: any; error: any } = { data: [{ id: '1', name: 'Semester 1' }], error: null };
 
 // Mock Supabase client
 jest.mock('@/lib/supabaseAdmin', () => {
@@ -29,10 +32,12 @@ jest.mock('@/lib/supabaseAdmin', () => {
         builder.select = jest.fn().mockReturnValue(builder);
         builder.eq = mockEq.mockImplementation(() => builder);
         builder.neq = mockNeq.mockImplementation(() => builder);
-        builder.limit = jest.fn().mockResolvedValue({ data: [] });
-        builder.order = mockOrder;
+        builder.limit = mockLimit.mockImplementation(() => builder);
+        builder.order = mockOrder.mockImplementation(() => builder);
         builder.insert = mockInsert;
         builder.update = mockUpdate.mockImplementation(() => builder);
+        builder.delete = mockDelete.mockImplementation(() => builder);
+        builder.maybeSingle = mockMaybeSingle;
         builder.then = jest.fn((resolve) => resolve(queryResult));
         return builder;
       }),
@@ -43,12 +48,15 @@ jest.mock('@/lib/supabaseAdmin', () => {
 describe('Semester Actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    queryResult = { data: [], error: null };
+    queryResult = { data: [{ id: '1', name: 'Semester 1' }], error: null };
     mockInsert.mockResolvedValue({ error: null });
-    mockOrder.mockResolvedValue({ data: [{ id: '1', name: 'Semester 1' }] });
+    mockOrder.mockImplementation(function (this: any) { return this; });
+    mockLimit.mockResolvedValue({ data: [] });
     mockUpdate.mockImplementation(function (this: any) { return this; });
+    mockDelete.mockImplementation(function (this: any) { return this; });
     mockEq.mockImplementation(function (this: any) { return this; });
     mockNeq.mockImplementation(function (this: any) { return this; });
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
   });
 
   it('lists semesters correctly', async () => {
@@ -59,6 +67,7 @@ describe('Semester Actions', () => {
   });
 
   it('adds a valid semester successfully and auto-activates when none is active', async () => {
+    mockLimit.mockResolvedValueOnce({ data: [] });
     await addSemester('2024/2025 ODD');
 
     expect(supabaseAdmin.from).toHaveBeenCalledWith('academic_years');
@@ -95,6 +104,27 @@ describe('Semester Actions', () => {
     it('throws error when database update fails', async () => {
       queryResult = { data: [], error: { message: 'Database connection failed' } };
       await expect(setActiveSemester(validUuid)).rejects.toThrow('Database connection failed');
+    });
+  });
+
+  describe('deleteSemester', () => {
+    const validUuid = '123e4567-e89b-12d3-a456-426614174000';
+
+    it('deletes semester and auto-activates remaining when deleted was active', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: { is_active: true } });
+      mockLimit.mockResolvedValueOnce({ data: [{ id: 'remaining-uuid' }] });
+
+      await deleteSemester(validUuid);
+
+      expect(mockDelete).toHaveBeenCalled();
+      expect(mockEq).toHaveBeenCalledWith('id', validUuid);
+      expect(mockUpdate).toHaveBeenCalledWith({ is_active: true });
+      expect(mockEq).toHaveBeenCalledWith('id', 'remaining-uuid');
+      expect(revalidatePath).toHaveBeenCalledWith('/admin');
+    });
+
+    it('rejects invalid UUID format for delete', async () => {
+      await expect(deleteSemester('invalid-id')).rejects.toThrow(/Invalid ID format/);
     });
   });
 });

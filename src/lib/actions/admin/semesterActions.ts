@@ -31,8 +31,32 @@ export async function addSemester(name: string) {
 export async function deleteSemester(id: string) {
   await requireRole('admin');
   const validId = idSchema.parse(id);
+
+  // Check if the deleted semester is currently active
+  const { data: target } = await supabaseAdmin
+    .from('academic_years')
+    .select('is_active')
+    .eq('id', validId)
+    .maybeSingle();
+
   const { error } = await supabaseAdmin.from('academic_years').delete().eq('id', validId);
   if (error) throw new Error(error.message);
+
+  // If the deleted semester was active, automatically activate the most recent remaining semester
+  if (target?.is_active) {
+    const { data: remaining } = await supabaseAdmin
+      .from('academic_years')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (remaining && remaining.length > 0) {
+      await supabaseAdmin
+        .from('academic_years')
+        .update({ is_active: true })
+        .eq('id', remaining[0].id);
+    }
+  }
+
   revalidatePath('/admin');
 }
 

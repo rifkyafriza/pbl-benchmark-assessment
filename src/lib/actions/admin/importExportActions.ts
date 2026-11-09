@@ -281,7 +281,11 @@ export async function importSiapPblTemplate(rows: SiapPblImportRow[], academicYe
     if (existingStudentLinksErr) return { success: false, error: `Failed to fetch existing student links: ${existingStudentLinksErr.message}` };
     const existingStudentLinkSet = new Set((existingStudentLinks || []).map(l => `${l.team_id}_${l.student_id}`));
     
-    const newStudentLinks = studentTeamLinks.filter(l => !existingStudentLinkSet.has(`${l.team_id}_${l.student_id}`));
+    // Deduplicate studentTeamLinks before filtering against existing links
+    const uniqueStudentTeamLinks = Array.from(
+      new Map(studentTeamLinks.map(l => [`${l.team_id}_${l.student_id}`, l])).values()
+    );
+    const newStudentLinks = uniqueStudentTeamLinks.filter(l => !existingStudentLinkSet.has(`${l.team_id}_${l.student_id}`));
     if (newStudentLinks.length > 0) {
        const { error: insertStudentLinkErr } = await supabaseAdmin.from('team_students').insert(newStudentLinks);
        if (insertStudentLinkErr) return { success: false, error: `Failed to insert team-student links: ${insertStudentLinkErr.message}` };
@@ -377,7 +381,7 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
        await supabaseAdmin.from('team_lecturers').insert(newInserts);
     }
     if (updates.length > 0) {
-       await supabaseAdmin.from('team_lecturers').upsert(updates, { onConflict: 'team_id, lecturer_id' });
+       await supabaseAdmin.from('team_lecturers').upsert(updates, { onConflict: 'team_id, lecturer_id, role' });
     }
   }
 
@@ -453,16 +457,19 @@ export async function exportGradesData(academicYearId: string): Promise<{
     supabaseAdmin
       .from('team_students')
       .select('team_id, student_id, students(name, nim)')
-      .in('team_id', teamIds),
+      .in('team_id', teamIds)
+      .limit(10000),
     supabaseAdmin
       .from('grades')
       .select('team_id, student_id, lecturer_id, period, implementation_score, document_score, english_score')
-      .in('team_id', teamIds),
+      .in('team_id', teamIds)
+      .limit(10000),
     supabaseAdmin
       .from('team_lecturers')
       .select('team_id, lecturer_id, reviewer_order')
       .eq('role', 'reviewer')
-      .in('team_id', teamIds),
+      .in('team_id', teamIds)
+      .limit(10000),
   ]);
 
   // reviewer_order map: "teamId_lecturerId" → order number
@@ -745,7 +752,11 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     if (existingStudentLinksErr) return { success: false, error: `Failed to fetch existing student links: ${existingStudentLinksErr.message}` };
     const existingStudentLinkSet = new Set((existingStudentLinks || []).map(l => `${l.team_id}_${l.student_id}`));
     
-    const newStudentLinks = studentTeamLinks.filter(l => !existingStudentLinkSet.has(`${l.team_id}_${l.student_id}`));
+    // Deduplicate studentTeamLinks before filtering against existing links
+    const uniqueStudentTeamLinks = Array.from(
+      new Map(studentTeamLinks.map(l => [`${l.team_id}_${l.student_id}`, l])).values()
+    );
+    const newStudentLinks = uniqueStudentTeamLinks.filter(l => !existingStudentLinkSet.has(`${l.team_id}_${l.student_id}`));
     if (newStudentLinks.length > 0) {
        const { error: insertStudentLinkErr } = await supabaseAdmin.from('team_students').insert(newStudentLinks);
        if (insertStudentLinkErr) return { success: false, error: `Failed to insert team-student links: ${insertStudentLinkErr.message}` };

@@ -128,7 +128,7 @@ export async function saveGrades(
     .eq('period', period)
     .eq('is_locked', true)
     .limit(1);
-  if (existingLocked && existingLocked.length > 0 && !finalize) {
+  if (existingLocked && existingLocked.length > 0) {
     throw new Error('Scores are locked. Ask the admin to unlock before editing.');
   }
 
