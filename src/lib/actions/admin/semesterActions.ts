@@ -39,10 +39,21 @@ export async function deleteSemester(id: string) {
 export async function setActiveSemester(id: string) {
   await requireRole('admin');
   const validId = idSchema.parse(id);
-  // Single atomic UPDATE via RPC — avoids the race where two statements could
-  // leave zero active semesters if the second UPDATE fails.
-  const { error } = await supabaseAdmin.rpc('set_active_semester', { target_id: validId });
-  if (error) throw new Error(error.message);
+
+  // Deactivate other semesters (explicit WHERE id != validId satisfies safeupdate)
+  const { error: deactivateError } = await supabaseAdmin
+    .from('academic_years')
+    .update({ is_active: false })
+    .neq('id', validId);
+  if (deactivateError) throw new Error(deactivateError.message);
+
+  // Activate target semester (explicit WHERE id = validId satisfies safeupdate)
+  const { error: activateError } = await supabaseAdmin
+    .from('academic_years')
+    .update({ is_active: true })
+    .eq('id', validId);
+  if (activateError) throw new Error(activateError.message);
+
   revalidatePath('/admin');
 }
 
