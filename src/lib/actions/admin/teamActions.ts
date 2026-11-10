@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 const idSchema = z.string().uuid('Invalid ID format');
 const optionalIdSchema = z.string().uuid('Invalid ID format').nullable();
+const reviewerOrderSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.null()]);
 const studentSchema = z.object({
   nim: z.string().min(1, 'NIM is required').max(50),
   name: z.string().min(1, 'Name is required').max(150),
@@ -29,11 +30,17 @@ export async function setTeamAssignment(teamId: string, role: 'pimpro', lecturer
   revalidatePath('/admin');
 }
 
-export async function setTeamReviewer(teamId: string, previousLecturerId: string | null, newLecturerId: string | null) {
+export async function setTeamReviewer(
+  teamId: string,
+  previousLecturerId: string | null,
+  newLecturerId: string | null,
+  order?: 1 | 2 | 3 | null
+) {
   await requireRole('admin');
   const validTeamId = idSchema.parse(teamId);
   const validPrevId = optionalIdSchema.parse(previousLecturerId);
   const validNewId = optionalIdSchema.parse(newLecturerId);
+  const validOrder = order !== undefined ? reviewerOrderSchema.parse(order) : null;
 
   if (validNewId) {
     const { data: existing } = await supabaseAdmin
@@ -54,7 +61,12 @@ export async function setTeamReviewer(teamId: string, previousLecturerId: string
     if (delError) throw new Error(delError.message);
   }
   if (validNewId) {
-    const { error } = await supabaseAdmin.from('team_lecturers').insert({ team_id: validTeamId, lecturer_id: validNewId, role: 'reviewer' });
+    const { error } = await supabaseAdmin.from('team_lecturers').insert({
+      team_id: validTeamId,
+      lecturer_id: validNewId,
+      role: 'reviewer',
+      reviewer_order: validOrder
+    });
     if (error) throw new Error(error.message);
   }
   revalidatePath('/admin');
@@ -297,8 +309,6 @@ export async function updateTeamLinks(
   
   revalidatePath('/admin');
 }
-
-const reviewerOrderSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.null()]);
 
 /** Set or clear the reviewer order (1|2|3|null) for a reviewer on a team. */
 export async function setReviewerOrder(

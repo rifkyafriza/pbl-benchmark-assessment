@@ -124,44 +124,63 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleReviewerChange = async (teamId: string, previousLecturerId: string | null, newLecturerId: string) => {
+  const handleReviewerChange = async (
+    teamId: string,
+    previousLecturerId: string | null,
+    newLecturerId: string,
+    slotOrder: 1 | 2 | 3 = 1
+  ) => {
     const newLecturer = lecturerOptions.find(l => l.id === newLecturerId);
 
     setProgress(prev => prev.map(p => {
       if (p.team_id !== teamId) return p;
-      // Replace the slot where the previous reviewer was
-      const updatedReviewers = p.reviewers.map(r => {
-        if (r.lecturer_id === previousLecturerId) {
-          return {
-            ...r,
-            lecturer_id: newLecturer?.id || '',
-            lecturer_name: newLecturer?.name || 'Unknown',
-            // A new reviewer starts with 0 graded students. If they are swapped back, it will resync via the background fetch anyway.
-            graded_students: 0,
-            finalized_students: 0,
-            status: 'Not Started',
-            students: r.students.map(s => ({ ...s, is_graded: false, is_locked: false }))
-          };
-        }
-        return r;
-      });
-      // If we are ADDING a new reviewer (previousLecturerId was null/empty)
-      if (!previousLecturerId && newLecturer) {
-        updatedReviewers.push({
-          lecturer_id: newLecturer.id,
-          lecturer_name: newLecturer.name,
-          graded_students: 0,
-          finalized_students: 0,
-          status: 'Not Started',
-          reviewer_order: null,
-          students: p.reviewers[0]?.students?.map(s => ({ ...s, is_graded: false, is_locked: false })) || []
-        });
+      // If clearing reviewer
+      if (!newLecturerId && previousLecturerId) {
+        return { ...p, reviewers: p.reviewers.filter(r => r.lecturer_id !== previousLecturerId) };
       }
-      return { ...p, reviewers: updatedReviewers };
+      // Replace the slot where the previous reviewer was
+      const exists = p.reviewers.some(r => r.lecturer_id === previousLecturerId);
+      if (exists) {
+        const updatedReviewers = p.reviewers.map(r => {
+          if (r.lecturer_id === previousLecturerId) {
+            return {
+              ...r,
+              lecturer_id: newLecturer?.id || '',
+              lecturer_name: newLecturer?.name || 'Unknown',
+              reviewer_order: slotOrder,
+              graded_students: 0,
+              finalized_students: 0,
+              status: 'Not Started',
+              students: r.students.map(s => ({ ...s, is_graded: false, is_locked: false }))
+            };
+          }
+          return r;
+        });
+        return { ...p, reviewers: updatedReviewers };
+      }
+      // Adding new reviewer
+      if (newLecturer) {
+        return {
+          ...p,
+          reviewers: [
+            ...p.reviewers,
+            {
+              lecturer_id: newLecturer.id,
+              lecturer_name: newLecturer.name,
+              graded_students: 0,
+              finalized_students: 0,
+              status: 'Not Started',
+              reviewer_order: slotOrder,
+              students: p.reviewers[0]?.students?.map(s => ({ ...s, is_graded: false, is_locked: false })) || []
+            }
+          ]
+        };
+      }
+      return p;
     }));
 
     try {
-      await setTeamReviewer(teamId, previousLecturerId, newLecturerId || null);
+      await setTeamReviewer(teamId, previousLecturerId, newLecturerId || null, slotOrder);
       getProgress(activeSemesterId).then(setProgress); // background sync
     } catch (e: any) {
       toast.error('Error updating reviewer: ' + e.message);
@@ -846,8 +865,20 @@ export default function AdminDashboard() {
                   </tr>
                 ) : (
                   filteredProgress.map((p, idx) => {
-                    // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
-                    const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
+                    // Fixed 3 slots: match by reviewer_order (1, 2, 3), pad with unassigned reviewers, then null
+                    const orderedSlots: (typeof p.reviewers[number] | null)[] = [null, null, null];
+                    const unassignedList = [...p.reviewers.filter(r => r.reviewer_order !== 1 && r.reviewer_order !== 2 && r.reviewer_order !== 3)];
+                    p.reviewers.forEach(r => {
+                      if (r.reviewer_order === 1 && !orderedSlots[0]) orderedSlots[0] = r;
+                      else if (r.reviewer_order === 2 && !orderedSlots[1]) orderedSlots[1] = r;
+                      else if (r.reviewer_order === 3 && !orderedSlots[2]) orderedSlots[2] = r;
+                    });
+                    for (let i = 0; i < 3; i++) {
+                      if (!orderedSlots[i] && unassignedList.length > 0) {
+                        orderedSlots[i] = unassignedList.shift()!;
+                      }
+                    }
+                    const slots = orderedSlots;
                       return (
                         <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800/50 opacity-0 animate-fade-in-up" style={{ animationDelay: `${idx * 0.05}s` }}>
                           <td className="p-4">
@@ -876,7 +907,7 @@ export default function AdminDashboard() {
                                 <select
                                   key={i}
                                   value={slot?.lecturer_id || ''}
-                                  onChange={(e) => handleReviewerChange(p.team_id, slot?.lecturer_id ?? null, e.target.value)}
+                                  onChange={(e) => handleReviewerChange(p.team_id, slot?.lecturer_id ?? null, e.target.value, (i + 1) as 1 | 2 | 3)}
                                   className="w-full border border-gray-300 dark:border-gray-600 rounded-lg pl-2 pr-6 py-1 text-sm dark:bg-gray-700 truncate"
                                 >
                                   <option value="">— reviewer {i + 1}: none —</option>

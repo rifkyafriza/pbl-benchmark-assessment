@@ -35,6 +35,13 @@ export async function getProgress(academicYearId: string) {
        if (l.role === 'reviewer') reviewersForTeam.push({ lecturer_id: l.lecturer_id, lecturer_name: l.users?.name || 'Unknown', reviewer_order: l.reviewer_order ?? null });
     });
 
+    reviewersForTeam.sort((a: any, b: any) => {
+      const orderA = a.reviewer_order ?? 99;
+      const orderB = b.reviewer_order ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.lecturer_name || '').localeCompare(b.lecturer_name || '');
+    });
+
     const totalStudents = (t.team_students || []).length;
     const team_kelas = t.kelas || null;
 

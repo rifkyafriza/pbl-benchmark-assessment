@@ -430,25 +430,25 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
   if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
 
   if (toApply.length > 0) {
-    const { data: existingAll } = await supabaseAdmin.from('team_lecturers').select('team_id, lecturer_id, reviewer_order').eq('role', 'reviewer').in('team_id', toApply.map(x => x.teamId));
-    const existingMap = new Map((existingAll||[]).map(x => [`${x.team_id}_${x.lecturer_id}`, x]));
-    
-    const newInserts = [];
-    const updates = [];
+    const deduplicated = new Map<string, { team_id: string; lecturer_id: string; role: string; reviewer_order: number }>();
     for (const apply of toApply) {
-       const key = `${apply.teamId}_${apply.lecturerId}`;
-       const existing = existingMap.get(key);
-       if (!existing) {
-         newInserts.push({ team_id: apply.teamId, lecturer_id: apply.lecturerId, role: 'reviewer', reviewer_order: apply.order });
-       } else if (existing.reviewer_order !== apply.order) {
-         updates.push({ team_id: apply.teamId, lecturer_id: apply.lecturerId, role: 'reviewer', reviewer_order: apply.order });
-       }
+      const key = `${apply.teamId}_${apply.lecturerId}`;
+      deduplicated.set(key, {
+        team_id: apply.teamId,
+        lecturer_id: apply.lecturerId,
+        role: 'reviewer',
+        reviewer_order: apply.order,
+      });
     }
-    if (newInserts.length > 0) {
-       await supabaseAdmin.from('team_lecturers').insert(newInserts);
-    }
-    if (updates.length > 0) {
-       await supabaseAdmin.from('team_lecturers').upsert(updates, { onConflict: 'team_id, lecturer_id, role' });
+
+    const records = Array.from(deduplicated.values());
+    if (records.length > 0) {
+      const { error: upsertErr } = await supabaseAdmin
+        .from('team_lecturers')
+        .upsert(records, { onConflict: 'team_id, lecturer_id, role' });
+      if (upsertErr) {
+        return { success: false, error: `Failed to save reviewer assignments: ${upsertErr.message}` };
+      }
     }
   }
 

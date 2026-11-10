@@ -207,6 +207,29 @@ describe('Import/Export Actions', () => {
       expect(result.success).toBe(true);
       expect(result.assignmentsApplied).toBe(1);
     });
+
+    it('handles duplicate team rows in excel gracefully without error', async () => {
+      const rows = [
+        { 'KODE': 'PBL-01', 'JUDUL PROJECT': 'A', 'REVIEWER 1': 'Lec1' },
+        { 'KODE': 'PBL-01', 'JUDUL PROJECT': 'A', 'REVIEWER 1': 'Lec1' },
+      ];
+
+      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1', username: 'lec1' }]);
+      mockBuilders['users'] = usersB;
+
+      const teamsB = createMockBuilder([{ id: 'team-1', team_code: 'PBL-01', name: 'A' }]);
+      mockBuilders['teams'] = teamsB;
+
+      const teamLecB = createMockBuilder([]);
+      mockBuilders['team_lecturers'] = teamLecB;
+
+      const result = await importReviewersTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(true);
+      expect(teamLecB.upsert).toHaveBeenCalledWith(
+        [expect.objectContaining({ team_id: 'team-1', lecturer_id: 'lec-1', reviewer_order: 1 })],
+        { onConflict: 'team_id, lecturer_id, role' }
+      );
+    });
   });
 
   describe('exportGradesData', () => {
