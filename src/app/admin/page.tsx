@@ -312,11 +312,21 @@ export default function AdminDashboard() {
     });
   };
 
+  const createLecturerReferenceSheet = () => {
+    const data = lecturers.map(l => ({
+      'Nama Dosen': l.name,
+      'Username': l.username || '-',
+      'Inisial': l.initials || '-'
+    }));
+    return XLSX.utils.json_to_sheet(data.length > 0 ? data : [{ 'Nama Dosen': 'Belum ada data', 'Username': '-', 'Inisial': '-' }]);
+  };
+
   const downloadTeamsTemplate = () => {
     const rows = [{ 'TAHUN AJARAN': 'Genap 2025/2026', 'KODE': 'PBL-RE-001', 'JUDUL PROJECT': 'KRAI', 'PIMPRO': 'Rifqi Amalya Fatekha', 'NIM': '4222301008', 'NAMA': 'Josua Hottua Harianja', 'PRODI': 'TRK', 'SEMESTER': '2', 'KELAS': 'Pagi' }];
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'teams');
+    XLSX.utils.book_append_sheet(wb, createLecturerReferenceSheet(), 'Daftar Dosen (Referensi)');
     XLSX.writeFile(wb, 'import_template_teams.xlsx');
   };
 
@@ -343,6 +353,7 @@ export default function AdminDashboard() {
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'teams');
+    XLSX.utils.book_append_sheet(wb, createLecturerReferenceSheet(), 'Daftar Dosen (Referensi)');
     XLSX.writeFile(wb, 'import_template_siap_pbl.xlsx');
   };
 
@@ -351,6 +362,7 @@ export default function AdminDashboard() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'reviewers');
+    XLSX.utils.book_append_sheet(wb, createLecturerReferenceSheet(), 'Daftar Dosen (Referensi)');
     XLSX.writeFile(wb, 'import_template_reviewers.xlsx');
   };
 

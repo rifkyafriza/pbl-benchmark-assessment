@@ -5,35 +5,68 @@ import { requireRole } from '@/lib/auth';
 
 const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
+const ACADEMIC_TITLES = new Set([
+  'dr', 'dra', 'drs', 'ir', 'prof',
+  'st', 'mt', 'skom', 'mkom', 'spd', 'mpd', 'ssi', 'msi',
+  'se', 'mm', 'msc', 'phd', 'mcs', 'beng', 'meng', 'sst', 'strt', 'mtrt',
+  'gr', 'dsn', 'mti'
+]);
+
+function cleanTitlesAndPunctuation(str: string): string {
+  const rawWords = str.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const filtered = rawWords.filter(w => !ACADEMIC_TITLES.has(w));
+  return filtered.join(' ');
+}
+
+type LecturerMatchCandidate = {
+  id: string;
+  name: string;
+  username: string | null;
+  initials?: string | null;
+};
+
 function resolveLecturer(
   value: string,
-  lecturers: { id: string; name: string; username: string | null }[]
+  lecturers: LecturerMatchCandidate[]
 ): { id: string; name: string } | { error: string } {
   const input = normalize(value);
+  if (!input) return { error: 'empty lecturer name' };
 
+  // 1. Exact username match
   const usernameHit = lecturers.find((l) => l.username && normalize(l.username) === input);
   if (usernameHit) return { id: usernameHit.id, name: usernameHit.name };
 
+  // 2. Exact initials match (case-insensitive)
+  const initialsHit = lecturers.find((l) => l.initials && normalize(l.initials) === input);
+  if (initialsHit) return { id: initialsHit.id, name: initialsHit.name };
+
+  // 3. Exact full name match (case-insensitive)
   const exactNameHit = lecturers.find((l) => normalize(l.name) === input);
   if (exactNameHit) return { id: exactNameHit.id, name: exactNameHit.name };
 
-  const inputWords = input.split(' ').filter(Boolean);
+  // 4. Cleaned degree & punctuation exact match
+  const cleanInput = cleanTitlesAndPunctuation(value);
+  if (cleanInput) {
+    const cleanHit = lecturers.find((l) => cleanTitlesAndPunctuation(l.name) === cleanInput);
+    if (cleanHit) return { id: cleanHit.id, name: cleanHit.name };
+  }
+
+  // 5. Substring / Token overlap on cleaned strings
+  const inputWords = cleanInput.split(' ').filter(Boolean);
   const candidates = lecturers.filter((l) => {
-    const name = normalize(l.name);
-    // if database name contains the input, or input (with degrees) contains database name
-    if (name.includes(input) || input.includes(name)) return true;
-    
-    // check if all words of the database name are in the input, or vice versa
-    const nameWords = name.split(' ').filter(Boolean);
-    const hasAllNameWords = nameWords.every((w) => inputWords.includes(w));
-    const hasAllInputWords = inputWords.every((w) => nameWords.includes(w));
-    return hasAllNameWords || hasAllInputWords;
+    const cleanDb = cleanTitlesAndPunctuation(l.name);
+    if (!cleanDb) return false;
+    if (cleanDb.includes(cleanInput) || cleanInput.includes(cleanDb)) return true;
+    const dbWords = cleanDb.split(' ').filter(Boolean);
+    const hasAllDbWords = dbWords.every((w) => inputWords.includes(w));
+    const hasAllInputWords = inputWords.every((w) => dbWords.includes(w));
+    return hasAllDbWords || hasAllInputWords;
   });
 
   if (candidates.length === 1) return { id: candidates[0].id, name: candidates[0].name };
   if (candidates.length === 0) return { error: `no lecturer found matching "${value}"` };
-  
-  // Sort candidates by length (closest match first) to try and find the best one, if not throw ambiguous
+
+  // Sort candidates by length (closest match first) to try and find the best one
   const bestMatch = candidates.sort((a, b) => Math.abs(a.name.length - input.length) - Math.abs(b.name.length - input.length))[0];
   if (bestMatch) return { id: bestMatch.id, name: bestMatch.name };
 
@@ -60,7 +93,7 @@ type SiapPblImportRow = {
 export async function importSiapPblTemplate(rows: SiapPblImportRow[], academicYearId: string) {
   await requireRole('admin');
 
-  const { data: lecturers } = await supabaseAdmin.from('users').select('id, name, username').eq('role', 'lecturer');
+  const { data: lecturers } = await supabaseAdmin.from('users').select('id, name, username, initials').eq('role', 'lecturer');
   const lecturerList = lecturers || [];
 
   const errors: string[] = [];
@@ -305,7 +338,7 @@ export type ReviewersImportRow = {
 export async function importReviewersTemplate(rows: ReviewersImportRow[], academicYearId: string) {
   await requireRole('admin');
 
-  const { data: lecturers } = await supabaseAdmin.from('users').select('id, name, username').eq('role', 'lecturer');
+  const { data: lecturers } = await supabaseAdmin.from('users').select('id, name, username, initials').eq('role', 'lecturer');
   const lecturerList = lecturers || [];
 
   const errors: string[] = [];
@@ -576,17 +609,40 @@ type TeamsImportRow = {
 export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId: string) {
   await requireRole('admin');
 
+  const { data: lecturers, error: lecturersErr } = await supabaseAdmin
+    .from('users')
+    .select('id, name, username, initials')
+    .eq('role', 'lecturer');
+  if (lecturersErr) return { success: false, error: 'Failed to fetch lecturers' };
+  const lecturerList = lecturers || [];
+
   const errors: string[] = [];
   const seenTeamCodes = new Set<string>();
   const seenStudents = new Set<string>();
-  rows.forEach((r, i) => {
+  const pimproResolvedMap = new Map<string, string>(); // rawPimpro -> lecturerId
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
     const line = i + 2;
     if (!r['KODE'] || !String(r['KODE']).trim()) errors.push(`Row ${line}: missing KODE`);
     if (!r['JUDUL PROJECT'] || !String(r['JUDUL PROJECT']).trim()) errors.push(`Row ${line}: missing JUDUL PROJECT`);
     if (!r['PIMPRO'] || !String(r['PIMPRO']).trim()) errors.push(`Row ${line}: missing PIMPRO`);
     if (!r['NIM'] || !String(r['NIM']).trim()) errors.push(`Row ${line}: missing NIM`);
     if (!r['NAMA'] || !String(r['NAMA']).trim()) errors.push(`Row ${line}: missing NAMA`);
-    if (!r['NIM'] || !r['NAMA']) return;
+
+    const pimproRaw = r['PIMPRO'] ? String(r['PIMPRO']).trim() : '';
+    if (pimproRaw) {
+      if (!pimproResolvedMap.has(pimproRaw)) {
+        const resolved = resolveLecturer(pimproRaw, lecturerList);
+        if ('error' in resolved) {
+          errors.push(`Row ${line}: PIMPRO "${pimproRaw}": ${resolved.error}`);
+        } else {
+          pimproResolvedMap.set(pimproRaw, resolved.id);
+        }
+      }
+    }
+
+    if (!r['NIM'] || !r['NAMA']) continue;
 
     const nim = String(r['NIM']).trim();
     const name = String(r['NAMA']).trim();
@@ -596,35 +652,9 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     }
     seenStudents.add(studentKey);
     seenTeamCodes.add(String(r['KODE']).trim());
-  });
+  }
 
   if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
-
-  const pimproNames = Array.from(new Set(rows.map((r) => String(r['PIMPRO']).trim())));
-  const lecturerMap = new Map<string, string>();
-  
-  const { data: existingLecturers, error: existingLecturersErr } = await supabaseAdmin
-    .from('users')
-    .select('id, name')
-    .eq('role', 'lecturer')
-    .in('name', pimproNames);
-  if (existingLecturersErr) return { success: false, error: 'Failed to fetch lecturers' };
-
-  const existingLecturersList = existingLecturers || [];
-  const existingLecturerNames = new Set(existingLecturersList.map(l => l.name));
-  
-  const newLecturers = pimproNames.filter(n => !existingLecturerNames.has(n)).map(name => ({ name, role: 'lecturer' }));
-  
-  if (newLecturers.length > 0) {
-    const { data: insertedLecturers, error: insertLecturersErr } = await supabaseAdmin
-      .from('users')
-      .insert(newLecturers)
-      .select('id, name');
-    if (insertLecturersErr) return { success: false, error: `Failed to create new lecturers: ${insertLecturersErr.message}` };
-    existingLecturersList.push(...(insertedLecturers || []));
-  }
-  
-  existingLecturersList.forEach(l => lecturerMap.set(l.name, l.id));
 
   const teamRows = Array.from(new Map(rows.map((r) => [`${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`, r])).values());
   const teamMap = new Map<string, string>();
@@ -670,7 +700,7 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
     const code = String(r['KODE']).trim();
     const projectName = String(r['JUDUL PROJECT']).trim();
     const teamId = teamMap.get(`${code}_${projectName}`);
-    const lecturerId = lecturerMap.get(String(r['PIMPRO']).trim());
+    const lecturerId = pimproResolvedMap.get(String(r['PIMPRO']).trim());
     if (teamId && lecturerId) {
        teamLecturerLinks.push({ team_id: teamId, lecturer_id: lecturerId, role: 'pimpro' });
     }

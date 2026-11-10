@@ -85,6 +85,41 @@ describe('Import/Export Actions', () => {
       expect(result.teamsProcessed).toBe(1);
       expect(result.studentsProcessed).toBe(1);
     });
+
+    it('resolves PIMPRO with academic degrees, all-caps, and initials without creating new users', async () => {
+      const rows = [
+        { 'KODE': 'T01', 'JUDUL PROJECT': 'P1', 'PIMPRO': 'Senanjung Prayoga, S.Pd, M.T', 'NIM': '101', 'NAMA': 'Alice' },
+        { 'KODE': 'T02', 'JUDUL PROJECT': 'P2', 'PIMPRO': 'RIFKY AFRIZA', 'NIM': '102', 'NAMA': 'Bob' },
+        { 'KODE': 'T03', 'JUDUL PROJECT': 'P3', 'PIMPRO': 'RA', 'NIM': '103', 'NAMA': 'Charlie' },
+      ];
+
+      const usersB = createMockBuilder([
+        { id: 'lec-1', name: 'Senanjung Prayoga', username: 'yoga', initials: 'SP' },
+        { id: 'lec-2', name: 'Rifky Afriza', username: 'rifky', initials: 'RI' },
+        { id: 'lec-3', name: 'Rifqi Amalya Fatekha', username: 'rifqi', initials: 'RA' },
+      ]);
+      mockBuilders['users'] = usersB;
+
+      const result = await importTeamsTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(true);
+      expect(result.teamsProcessed).toBe(3);
+      expect(result.studentsProcessed).toBe(3);
+      expect(usersB.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects import if PIMPRO is not found and does not insert new users', async () => {
+      const rows = [
+        { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'PIMPRO': 'Unknown Dosen', 'NIM': '123', 'NAMA': 'John' },
+      ];
+
+      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1', username: 'lec1', initials: 'L1' }]);
+      mockBuilders['users'] = usersB;
+
+      const result = await importTeamsTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('no lecturer found matching "Unknown Dosen"');
+      expect(usersB.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe('importReviewersTemplate', () => {
@@ -130,6 +165,29 @@ describe('Import/Export Actions', () => {
         ]),
         { onConflict: 'team_id, lecturer_id, role' }
       );
+    });
+
+    it('resolves reviewers by initials and degrees', async () => {
+      const rows = [
+        { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'REVIEWER 1': 'RA', 'REVIEWER 2': 'Dr. Senanjung Prayoga, M.T' },
+      ];
+
+      const usersB = createMockBuilder([
+        { id: 'lec-1', name: 'Rifqi Amalya Fatekha', username: 'rifqi', initials: 'RA' },
+        { id: 'lec-2', name: 'Senanjung Prayoga', username: 'yoga', initials: 'SP' },
+      ]);
+      mockBuilders['users'] = usersB;
+
+      const teamsB = createMockBuilder();
+      teamsB.maybeSingle.mockResolvedValueOnce({ data: { id: 'team-1' }, error: null });
+      mockBuilders['teams'] = teamsB;
+
+      const teamLecB = createMockBuilder([]);
+      mockBuilders['team_lecturers'] = teamLecB;
+
+      const result = await importReviewersTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(true);
+      expect(result.assignmentsApplied).toBe(2);
     });
   });
 
