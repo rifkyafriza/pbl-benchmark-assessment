@@ -12,7 +12,7 @@ import {
 import {
   deleteTeam, getTeamStudents, updateStudent, addStudentToTeam, removeStudentFromTeam, updateTeamClass, updateTeamLinks, setReviewerOrder,
 } from '@/lib/actions/admin/teamActions';
-import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown } from 'lucide-react';
+import { Upload, Users, BookOpen, Loader2, Download, Trash2, CheckCircle, Plus, Unlock, LogOut, UserPlus, Pencil, ExternalLink, ArrowUpDown, Search, X } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import ChangePasswordForm from '@/components/ChangePasswordForm';
 import AddTeamModal from './AddTeamModal';
@@ -60,6 +60,7 @@ export default function AdminDashboard() {
   const [selectedDocsTeam, setSelectedDocsTeam] = useState<TeamProgress | null>(null);
   const [selectedReviewerProgress, setSelectedReviewerProgress] = useState<{ teamId?: string; lecturerId?: string; teamName: string; reviewerName: string; reviewerIndex: number; students: { id: string; nim: string; name: string; is_graded: boolean; is_locked: boolean; implementation_score?: number; document_score?: number; english_score?: number; comment?: string | null }[] } | null>(null);
   const [kelasFilter, setKelasFilter] = useState<string>('Semua');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [loading, setLoading] = useState(true);
@@ -552,6 +553,31 @@ export default function AdminDashboard() {
     );
   }
 
+  const query = searchQuery.trim().toLowerCase();
+  const filteredProgress = progress
+    .filter((p) => {
+      if (kelasFilter === 'Pagi' && !p.team_kelas?.toLowerCase().includes('pagi')) return false;
+      if (kelasFilter === 'Malam' && !p.team_kelas?.toLowerCase().includes('malam')) return false;
+
+      if (query) {
+        const matchesTeamName = p.team_name?.toLowerCase().includes(query);
+        const matchesTeamCode = p.team_code?.toLowerCase().includes(query);
+        const matchesPimpro = p.pimpro_name?.toLowerCase().includes(query);
+        const matchesReviewer = p.reviewers?.some((r) => r.lecturer_name?.toLowerCase().includes(query));
+        const matchesStudent = p.reviewers?.some((r) =>
+          r.students?.some((s) => s.name?.toLowerCase().includes(query) || s.nim?.toLowerCase().includes(query))
+        );
+
+        return Boolean(matchesTeamName || matchesTeamCode || matchesPimpro || matchesReviewer || matchesStudent);
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const cmp = (a.team_name || '').localeCompare(b.team_name || '');
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
   return (
     <>
       <div className="min-h-screen p-8 max-w-7xl mx-auto space-y-8 relative">
@@ -732,11 +758,31 @@ export default function AdminDashboard() {
         <section className="glass-panel antigravity-shadow rounded-xl overflow-hidden">
           <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
             <h2 className="text-xl font-semibold">Reviewer Grading Progress</h2>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Cari tim, kode, dosen, mahasiswa..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-8 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 w-52 sm:w-64 transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    title="Hapus pencarian"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
               <select
                 value={kelasFilter}
                 onChange={(e) => setKelasFilter(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm dark:bg-gray-700"
+                className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm dark:bg-gray-700 dark:text-gray-100"
               >
                 <option value="Semua">Semua Kelas</option>
                 <option value="Pagi">Kelas Pagi</option>
@@ -768,24 +814,28 @@ export default function AdminDashboard() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto text-sky" /></td></tr>
+                  <tr><td colSpan={7} className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto text-sky" /></td></tr>
                 ) : progress.length === 0 ? (
-                  <tr><td colSpan={6} className="p-8 text-center text-gray-500">No data available for this tahun ajaran. Import teams and reviewer assignments first.</td></tr>
+                  <tr><td colSpan={7} className="p-8 text-center text-gray-500">No data available for this tahun ajaran. Import teams and reviewer assignments first.</td></tr>
+                ) : filteredProgress.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-gray-500">
+                      <p className="font-medium text-gray-700 dark:text-gray-300">Tidak ada tim yang sesuai dengan pencarian atau filter yang dipilih.</p>
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="mt-2 text-xs text-sky hover:underline font-medium"
+                        >
+                          Reset Pencarian
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                 ) : (
-                  progress
-                    .filter((p) => {
-                      if (kelasFilter === 'Semua') return true;
-                      if (kelasFilter === 'Pagi') return p.team_kelas?.toLowerCase().includes('pagi');
-                      if (kelasFilter === 'Malam') return p.team_kelas?.toLowerCase().includes('malam');
-                      return true;
-                    })
-                    .sort((a, b) => {
-                      const cmp = (a.team_name || '').localeCompare(b.team_name || '');
-                      return sortDirection === 'asc' ? cmp : -cmp;
-                    })
-                    .map((p, idx) => {
-                      // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
-                      const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
+                  filteredProgress.map((p, idx) => {
+                    // Fixed 3 slots: fill with actual reviewers first, pad the rest with empty slots.
+                    const slots = [0, 1, 2].map((i) => p.reviewers[i] ?? null);
                       return (
                         <tr key={p.team_id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800/50 opacity-0 animate-fade-in-up" style={{ animationDelay: `${idx * 0.05}s` }}>
                           <td className="p-4">
