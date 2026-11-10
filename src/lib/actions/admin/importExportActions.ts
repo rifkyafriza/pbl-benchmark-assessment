@@ -690,37 +690,83 @@ export async function importTeamsTemplate(rows: TeamsImportRow[], academicYearId
 
   if (errors.length > 0) return { success: false, error: `Import aborted, no rows were applied. Errors:\n${errors.join('\n')}` };
 
+  // Calculate majority student class (Pagi vs Malam) per team
+  const teamClassMap = new Map<string, 'Pagi' | 'Malam' | null>();
+  const teamMemberRows = new Map<string, TeamsImportRow[]>();
+
+  for (const r of rows) {
+    const key = `${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`;
+    if (!teamMemberRows.has(key)) teamMemberRows.set(key, []);
+    teamMemberRows.get(key)!.push(r);
+  }
+
+  for (const [key, members] of teamMemberRows.entries()) {
+    let pagiCount = 0;
+    let malamCount = 0;
+
+    for (const m of members) {
+      const k = String(m['KELAS'] || '').trim().toLowerCase();
+      if (k.includes('pagi')) pagiCount++;
+      else if (k.includes('malam')) malamCount++;
+    }
+
+    if (pagiCount > malamCount) {
+      teamClassMap.set(key, 'Pagi');
+    } else if (malamCount > pagiCount) {
+      teamClassMap.set(key, 'Malam');
+    } else if (pagiCount > 0 && pagiCount === malamCount) {
+      teamClassMap.set(key, 'Pagi');
+    } else {
+      teamClassMap.set(key, null);
+    }
+  }
+
   const teamRows = Array.from(new Map(rows.map((r) => [`${String(r['KODE']).trim()}_${String(r['JUDUL PROJECT']).trim()}`, r])).values());
   const teamMap = new Map<string, string>();
   
   const teamCodes = teamRows.map(r => String(r['KODE']).trim());
   const { data: existingTeams, error: existingTeamsErr } = await supabaseAdmin
     .from('teams')
-    .select('id, team_code, name, is_deleted')
+    .select('id, team_code, name, is_deleted, kelas')
     .eq('academic_year_id', academicYearId)
     .in('team_code', teamCodes);
   if (existingTeamsErr) return { success: false, error: 'Failed to fetch existing teams' };
   
   const existingTeamsList = existingTeams || [];
   const newTeamsToInsert = [];
-  const teamsToRestore = [];
+  const teamsToUpsert = [];
   
   for (const r of teamRows) {
     const code = String(r['KODE']).trim();
     const projectName = String(r['JUDUL PROJECT']).trim();
+    const key = `${code}_${projectName}`;
     const existing = existingTeamsList.find(t => t.team_code === code && t.name === projectName);
+    const determinedClass = teamClassMap.get(key) ?? null;
     
     if (existing) {
-      teamMap.set(`${code}_${projectName}`, existing.id);
-      if (existing.is_deleted) teamsToRestore.push(existing.id);
+      teamMap.set(key, existing.id);
+      const targetClass = determinedClass ?? existing.kelas ?? null;
+      teamsToUpsert.push({
+        id: existing.id,
+        academic_year_id: academicYearId,
+        team_code: code,
+        name: projectName,
+        is_deleted: false,
+        kelas: targetClass,
+      });
     } else {
-      newTeamsToInsert.push({ academic_year_id: academicYearId, team_code: code, name: projectName });
+      newTeamsToInsert.push({
+        academic_year_id: academicYearId,
+        team_code: code,
+        name: projectName,
+        kelas: determinedClass,
+      });
     }
   }
   
-  if (teamsToRestore.length > 0) {
-     const { error: restoreErr } = await supabaseAdmin.from('teams').update({ is_deleted: false }).in('id', teamsToRestore);
-     if (restoreErr) return { success: false, error: 'Failed to restore teams' };
+  if (teamsToUpsert.length > 0) {
+     const { error: upsertErr } = await supabaseAdmin.from('teams').upsert(teamsToUpsert);
+     if (upsertErr) return { success: false, error: `Failed to update teams: ${upsertErr.message}` };
   }
   
   if (newTeamsToInsert.length > 0) {

@@ -107,18 +107,69 @@ describe('Import/Export Actions', () => {
       expect(usersB.insert).not.toHaveBeenCalled();
     });
 
-    it('rejects import if PIMPRO is not found and does not insert new users', async () => {
+    it('sets team kelas to Pagi when majority of members are Pagi', async () => {
       const rows = [
-        { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'PIMPRO': 'Unknown Dosen', 'NIM': '123', 'NAMA': 'John' },
+        { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'PIMPRO': 'Lec1', 'NIM': '101', 'NAMA': 'A', 'KELAS': 'Pagi' },
+        { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'PIMPRO': 'Lec1', 'NIM': '102', 'NAMA': 'B', 'KELAS': 'Pagi' },
+        { 'KODE': 'T01', 'JUDUL PROJECT': 'A', 'PIMPRO': 'Lec1', 'NIM': '103', 'NAMA': 'C', 'KELAS': 'Malam' },
       ];
 
-      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1', username: 'lec1', initials: 'L1' }]);
+      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1' }]);
       mockBuilders['users'] = usersB;
 
+      const teamsB = createMockBuilder([]);
+      mockBuilders['teams'] = teamsB;
+
       const result = await importTeamsTemplate(rows, 'academic-year-1');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('no lecturer found matching "Unknown Dosen"');
-      expect(usersB.insert).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(teamsB.insert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ team_code: 'T01', kelas: 'Pagi' })
+        ])
+      );
+    });
+
+    it('sets team kelas to Malam when majority of members are Malam', async () => {
+      const rows = [
+        { 'KODE': 'T02', 'JUDUL PROJECT': 'B', 'PIMPRO': 'Lec1', 'NIM': '201', 'NAMA': 'A', 'KELAS': 'Pagi' },
+        { 'KODE': 'T02', 'JUDUL PROJECT': 'B', 'PIMPRO': 'Lec1', 'NIM': '202', 'NAMA': 'B', 'KELAS': 'Malam' },
+        { 'KODE': 'T02', 'JUDUL PROJECT': 'B', 'PIMPRO': 'Lec1', 'NIM': '203', 'NAMA': 'C', 'KELAS': 'Malam' },
+      ];
+
+      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1' }]);
+      mockBuilders['users'] = usersB;
+
+      const teamsB = createMockBuilder([]);
+      mockBuilders['teams'] = teamsB;
+
+      const result = await importTeamsTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(true);
+      expect(teamsB.insert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ team_code: 'T02', kelas: 'Malam' })
+        ])
+      );
+    });
+
+    it('updates existing team with determined majority class', async () => {
+      const rows = [
+        { 'KODE': 'T03', 'JUDUL PROJECT': 'C', 'PIMPRO': 'Lec1', 'NIM': '301', 'NAMA': 'A', 'KELAS': 'Malam' },
+        { 'KODE': 'T03', 'JUDUL PROJECT': 'C', 'PIMPRO': 'Lec1', 'NIM': '302', 'NAMA': 'B', 'KELAS': 'Malam' },
+      ];
+
+      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1' }]);
+      mockBuilders['users'] = usersB;
+
+      const teamsB = createMockBuilder([{ id: 'team-3', team_code: 'T03', name: 'C', kelas: null }]);
+      mockBuilders['teams'] = teamsB;
+
+      const result = await importTeamsTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(true);
+      expect(teamsB.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'team-3', kelas: 'Malam' })
+        ])
+      );
     });
   });
 
