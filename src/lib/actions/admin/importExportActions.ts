@@ -338,12 +338,50 @@ export type ReviewersImportRow = {
 export async function importReviewersTemplate(rows: ReviewersImportRow[], academicYearId: string) {
   await requireRole('admin');
 
-  const { data: lecturers } = await supabaseAdmin.from('users').select('id, name, username, initials').eq('role', 'lecturer');
+  const [
+    { data: lecturers },
+    { data: teams, error: teamsErr }
+  ] = await Promise.all([
+    supabaseAdmin.from('users').select('id, name, username, initials').eq('role', 'lecturer'),
+    supabaseAdmin.from('teams').select('id, team_code, name').eq('academic_year_id', academicYearId).eq('is_deleted', false)
+  ]);
+
+  if (teamsErr) return { success: false, error: 'Failed to fetch teams' };
   const lecturerList = lecturers || [];
+  const teamList = teams || [];
 
   const errors: string[] = [];
-  const teamCodeCache = new Map<string, string | null>();
+  const teamCodeCache = new Map<string, { id: string } | { error: string }>();
   const toApply: { teamId: string; lecturerId: string; order: number }[] = [];
+
+  function findTeam(code: string, projectName: string): { id: string } | { error: string } {
+    const cleanCode = code.trim().toLowerCase();
+    const cleanProj = projectName.trim().toLowerCase();
+
+    // 1. Exact match on both code and name (case-insensitive)
+    const exactBoth = teamList.filter(t => 
+      t.team_code.trim().toLowerCase() === cleanCode && 
+      t.name.trim().toLowerCase() === cleanProj
+    );
+    if (exactBoth.length === 1) return { id: exactBoth[0].id };
+
+    // 2. Unique match by code (case-insensitive)
+    const byCode = teamList.filter(t => t.team_code.trim().toLowerCase() === cleanCode);
+    if (byCode.length === 1) return { id: byCode[0].id };
+
+    // 3. Disambiguate if multiple teams share the same code
+    if (byCode.length > 1) {
+      if (cleanProj) {
+        const byNameSubstring = byCode.filter(t => 
+          t.name.toLowerCase().includes(cleanProj) || cleanProj.includes(t.name.toLowerCase())
+        );
+        if (byNameSubstring.length === 1) return { id: byNameSubstring[0].id };
+      }
+      return { error: `multiple teams share code "${code}", please specify a more specific project name` };
+    }
+
+    return { error: `team "${code}" not found in this tahun ajaran` };
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -357,18 +395,14 @@ export async function importReviewersTemplate(rows: ReviewersImportRow[], academ
     const uniqueKey = `${code}_${projectName}`;
     
     if (!teamCodeCache.has(uniqueKey)) {
-      let query = supabaseAdmin.from('teams').select('id').eq('academic_year_id', academicYearId).eq('team_code', code);
-      if (projectName) {
-        query = query.eq('name', projectName);
-      }
-      const { data: t } = await query.maybeSingle();
-      teamCodeCache.set(uniqueKey, t?.id ?? null);
+      teamCodeCache.set(uniqueKey, findTeam(code, projectName));
     }
-    const teamId = teamCodeCache.get(uniqueKey);
-    if (!teamId) {
-      errors.push(`Row ${line}: team "${code}" with project "${projectName}" not found in this tahun ajaran`);
+    const resolvedTeam = teamCodeCache.get(uniqueKey)!;
+    if ('error' in resolvedTeam) {
+      errors.push(`Row ${line}: ${resolvedTeam.error}`);
       continue;
     }
+    const teamId = resolvedTeam.id;
 
     const slots: { label: string; value?: string }[] = [
       { label: 'REVIEWER 1', value: r['REVIEWER 1'] },

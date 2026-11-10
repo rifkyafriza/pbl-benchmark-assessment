@@ -131,13 +131,12 @@ describe('Import/Export Actions', () => {
       const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1', username: 'lec1' }]);
       mockBuilders['users'] = usersB;
 
-      const teamsB = createMockBuilder();
-      teamsB.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      const teamsB = createMockBuilder([]);
       mockBuilders['teams'] = teamsB;
 
       const result = await importReviewersTemplate(rows, 'academic-year-1');
       expect(result.success).toBe(false);
-      expect(result.error).toContain('team "T01" with project "A" not found');
+      expect(result.error).toContain('team "T01" not found');
     });
 
     it('uses onConflict with role when updating reviewer order', async () => {
@@ -148,8 +147,7 @@ describe('Import/Export Actions', () => {
       const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1', username: 'lec1' }]);
       mockBuilders['users'] = usersB;
 
-      const teamsB = createMockBuilder();
-      teamsB.maybeSingle.mockResolvedValueOnce({ data: { id: 'team-1' }, error: null });
+      const teamsB = createMockBuilder([{ id: 'team-1', team_code: 'T01', name: 'A' }]);
       mockBuilders['teams'] = teamsB;
 
       const teamLecB = createMockBuilder([
@@ -178,8 +176,7 @@ describe('Import/Export Actions', () => {
       ]);
       mockBuilders['users'] = usersB;
 
-      const teamsB = createMockBuilder();
-      teamsB.maybeSingle.mockResolvedValueOnce({ data: { id: 'team-1' }, error: null });
+      const teamsB = createMockBuilder([{ id: 'team-1', team_code: 'T01', name: 'A' }]);
       mockBuilders['teams'] = teamsB;
 
       const teamLecB = createMockBuilder([]);
@@ -188,6 +185,27 @@ describe('Import/Export Actions', () => {
       const result = await importReviewersTemplate(rows, 'academic-year-1');
       expect(result.success).toBe(true);
       expect(result.assignmentsApplied).toBe(2);
+    });
+
+    it('resolves team even when project title in Excel is truncated', async () => {
+      const rows = [
+        { 'KODE': 'PBL-01', 'JUDUL PROJECT': 'Mobile Robot: Robot Chassis', 'REVIEWER 1': 'Lec1' },
+      ];
+
+      const usersB = createMockBuilder([{ id: 'lec-1', name: 'Lec1', username: 'lec1' }]);
+      mockBuilders['users'] = usersB;
+
+      const teamsB = createMockBuilder([
+        { id: 'team-1', team_code: 'PBL-01', name: 'Mobile Robot: Robot Chassis Technology and Systems' },
+      ]);
+      mockBuilders['teams'] = teamsB;
+
+      const teamLecB = createMockBuilder([]);
+      mockBuilders['team_lecturers'] = teamLecB;
+
+      const result = await importReviewersTemplate(rows, 'academic-year-1');
+      expect(result.success).toBe(true);
+      expect(result.assignmentsApplied).toBe(1);
     });
   });
 
